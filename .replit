@@ -1,0 +1,14 @@
+# AURUM — Replit deployment configuration
+# Launches the Streamlit dashboard on the Replit-expected port.
+
+run = "streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true --browser.gatherUsageStats false"]
+
+[[ports]]
+localPort = 8501
+externalPort = 80
