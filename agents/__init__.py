@@ -1,6 +1,6 @@
 """Trading strategy agents for AURUM."""
 
-from agents.base_agent import AgentResult, BaseAgent
+from agents.base_agent import AgentMessage, AgentResult, BaseAgent
 from agents.bollinger_agent import BollingerAgent
 from agents.ema_agent import EMAAgent
 from agents.macd_agent import MACDAgent
@@ -9,6 +9,7 @@ from agents.rsi_agent import RSIAgent
 from agents.sma_agent import SMAAgent
 
 __all__ = [
+    "AgentMessage",
     "AgentResult",
     "BaseAgent",
     "BollingerAgent",
@@ -18,3 +19,4 @@ __all__ = [
     "RSIAgent",
     "SMAAgent",
 ]
+
