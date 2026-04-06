@@ -4,13 +4,23 @@ AURUM ⚡ Gold Strategy Evaluator — Streamlit Dashboard
 Launch:
     streamlit run dashboard/app.py
 
+Replit:
+    Starts automatically via .replit run command on port 8501.
+
 The dashboard wires together every layer of the AURUM pipeline:
     yfinance → indicators → parser → orchestrator → backtest → visualisation
+
+Optimised for Replit free-tier:
+    - Lazy imports inside functions to reduce cold-start memory
+    - API keys read exclusively from os.environ (Replit Secrets or .env)
+    - Health check sidebar for live diagnostics
 """
 
 from __future__ import annotations
 
+import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ------------------------------------------------------------------
@@ -21,16 +31,7 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
-
-from agents.orchestrator import OrchestratorAgent
-from backtest.engine import BacktestEngine
-from data.fetcher import fetch_xauusd_history
-from indicators.calculator import add_all_indicators
-from parser.strategy_parser import StrategyParser
 
 # ══════════════════════════════════════════════════════════════════════
 # THEME CONSTANTS
@@ -230,38 +231,100 @@ st.markdown(
 
 
 # ══════════════════════════════════════════════════════════════════════
+# LAZY IMPORT HELPERS (reduce cold‑start memory on Replit free tier)
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _get_yfinance():
+    """Lazy-import yfinance only when data fetching is needed."""
+    import yfinance as yf
+    return yf
+
+
+def _get_plotly():
+    """Lazy-import plotly.graph_objects for chart building."""
+    import plotly.graph_objects as go
+    return go
+
+
+def _get_pandas():
+    """Lazy-import pandas."""
+    import pandas as pd
+    return pd
+
+
+def _get_orchestrator():
+    """Lazy-import OrchestratorAgent to avoid loading all agents on boot."""
+    from agents.orchestrator import OrchestratorAgent
+    return OrchestratorAgent
+
+
+def _get_backtest_engine():
+    """Lazy-import BacktestEngine to defer numpy/vectorbt loading."""
+    from backtest.engine import BacktestEngine
+    return BacktestEngine
+
+
+def _get_parser():
+    """Lazy-import StrategyParser."""
+    from parser.strategy_parser import StrategyParser
+    return StrategyParser
+
+
+def _get_fetcher():
+    """Lazy-import the data fetcher function."""
+    from data.fetcher import fetch_xauusd_history
+    return fetch_xauusd_history
+
+
+def _get_indicator_calculator():
+    """Lazy-import the indicator calculator function."""
+    from indicators.calculator import add_all_indicators
+    return add_all_indicators
+
+
+# ══════════════════════════════════════════════════════════════════════
 # DATA HELPERS (cached)
 # ══════════════════════════════════════════════════════════════════════
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def _fetch_gold_price() -> float | None:
+def _fetch_gold_price() -> tuple[float | None, str]:
     """
     Grab the latest Gold Futures close from yfinance.
 
     Cached for 15 minutes to avoid hammering the API on every rerun.
     Uses GC=F (Gold Futures) which is more reliably available than XAUUSD=X.
+
+    Returns:
+        Tuple of (price_or_None, iso_timestamp_string).
     """
+    yf = _get_yfinance()
+    ts = datetime.now(timezone.utc).isoformat()
     try:
         ticker = yf.Ticker("GC=F")
         hist = ticker.history(period="5d", interval="1d")
         if hist.empty:
-            return None
-        return float(hist["Close"].iloc[-1])
+            return None, ts
+        return float(hist["Close"].iloc[-1]), ts
     except Exception:
-        return None
+        return None, ts
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_history(period: str) -> pd.DataFrame:
+def _fetch_history(period: str):
     """
     Fetch XAUUSD history via the project's own data fetcher.
 
     Falls back to GC=F directly if the primary symbol fails.
     Cached for 1 hour per period value.
     """
+    pd = _get_pandas()
+    yf = _get_yfinance()
+    fetch_xauusd = _get_fetcher()
+
     try:
-        return fetch_xauusd_history(period=period)
+        return fetch_xauusd(period=period)
     except RuntimeError:
         # Fallback to Gold Futures
         ticker = yf.Ticker("GC=F")
@@ -275,9 +338,83 @@ def _fetch_history(period: str) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _compute_indicators(_df: pd.DataFrame) -> pd.DataFrame:
+def _compute_indicators(_df):
     """Run add_all_indicators with caching (underscore prefix avoids hash issues)."""
-    return add_all_indicators(_df)
+    add_all = _get_indicator_calculator()
+    return add_all(_df)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HEALTH CHECK SIDEBAR
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _render_health_check() -> None:
+    """
+    Sidebar diagnostics panel showing system health:
+      - Last data fetch timestamp
+      - API connection status (green/red indicators)
+      - Current Gold spot price
+    """
+    with st.sidebar:
+        st.markdown("## 🩺 System Health")
+        st.markdown("---")
+
+        # --- Gold price & fetch time ---
+        gold_price, fetch_ts = _fetch_gold_price()
+
+        st.markdown("**Last Data Fetch**")
+        try:
+            dt = datetime.fromisoformat(fetch_ts)
+            st.caption(dt.strftime("%Y-%m-%d %H:%M:%S UTC"))
+        except (ValueError, TypeError):
+            st.caption(fetch_ts)
+
+        st.markdown("**Gold Spot Price**")
+        if gold_price is not None:
+            st.metric("GC=F", f"${gold_price:,.2f}")
+        else:
+            st.error("Unavailable")
+
+        st.markdown("---")
+
+        # --- API connection status ---
+        st.markdown("**API Connections**")
+
+        # yfinance (always available — no key)
+        yf_status = gold_price is not None
+        if yf_status:
+            st.markdown("🟢 **yfinance** — Connected")
+        else:
+            st.markdown("🔴 **yfinance** — Disconnected")
+
+        # Alpha Vantage
+        av_key = os.environ.get("ALPHA_VANTAGE_API_KEY")
+        if av_key:
+            st.markdown("🟢 **Alpha Vantage** — Key configured")
+        else:
+            st.markdown("🟡 **Alpha Vantage** — No key (optional)")
+
+        # Anthropic (Claude)
+        anth_key = os.environ.get("ANTHROPIC_API_KEY")
+        if anth_key:
+            st.markdown("🟢 **Anthropic (Claude)** — Key configured")
+        else:
+            st.markdown("🟡 **Anthropic** — No key (regex-only mode)")
+
+        st.markdown("---")
+
+        # --- Environment info ---
+        st.markdown("**Environment**")
+        import platform
+        st.caption(f"Python {platform.python_version()}")
+        st.caption(f"OS: {platform.system()} {platform.machine()}")
+
+        # Detect Replit
+        if os.environ.get("REPL_ID"):
+            st.markdown("🟢 Running on **Replit**")
+        else:
+            st.markdown("🖥️ Running **locally**")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -285,7 +422,7 @@ def _compute_indicators(_df: pd.DataFrame) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════
 
 
-def _build_candlestick(df: pd.DataFrame, n_days: int = 90) -> go.Figure:
+def _build_candlestick(df, n_days: int = 90):
     """
     Build a themed candlestick chart with EMA20 / EMA50 overlays.
 
@@ -298,6 +435,7 @@ def _build_candlestick(df: pd.DataFrame, n_days: int = 90) -> go.Figure:
     Returns:
         Plotly Figure ready for ``st.plotly_chart``.
     """
+    go = _get_plotly()
     tail = df.tail(n_days).copy()
 
     fig = go.Figure()
@@ -362,7 +500,7 @@ def _build_candlestick(df: pd.DataFrame, n_days: int = 90) -> go.Figure:
     return fig
 
 
-def _build_equity_chart(equity_curve: dict[str, float]) -> go.Figure:
+def _build_equity_chart(equity_curve: dict[str, float]):
     """
     Build a themed equity-curve line chart from the backtest engine output.
 
@@ -372,6 +510,8 @@ def _build_equity_chart(equity_curve: dict[str, float]) -> go.Figure:
     Returns:
         Plotly Figure.
     """
+    go = _get_plotly()
+
     if not equity_curve:
         fig = go.Figure()
         fig.update_layout(
@@ -447,15 +587,6 @@ def _render_conflict(conflict: dict) -> None:
     )
 
 
-def _agent_colour(score: float) -> str:
-    """Pick a colour for the agent score metric delta."""
-    if score >= 70:
-        return _GREEN
-    if score >= 55:
-        return _GOLD
-    return _RED
-
-
 # ══════════════════════════════════════════════════════════════════════
 # MAIN LAYOUT
 # ══════════════════════════════════════════════════════════════════════
@@ -464,8 +595,11 @@ def _agent_colour(score: float) -> str:
 def main() -> None:
     """Entry-point: assemble the full AURUM dashboard."""
 
+    # ── Health check sidebar (always rendered) ───────────────────────
+    _render_health_check()
+
     # ── Header ───────────────────────────────────────────────────────
-    gold_price = _fetch_gold_price()
+    gold_price, _ = _fetch_gold_price()
     price_str = f"${gold_price:,.2f}" if gold_price else "unavailable"
 
     st.markdown(
@@ -489,7 +623,7 @@ def main() -> None:
     # LEFT PANEL — Strategy Input
     # ══════════════════════════════════════════════════════════════════
     with col_left:
-        st.markdown(f"### 📝 Strategy Input")
+        st.markdown("### 📝 Strategy Input")
 
         strategy_text = st.text_area(
             label="Enter your Gold trading strategy",
@@ -525,8 +659,8 @@ def main() -> None:
 def _run_pipeline(
     strategy_text: str,
     period_years: int,
-    col_left: st.delta_generator.DeltaGenerator,
-    col_right: st.delta_generator.DeltaGenerator,
+    col_left,
+    col_right,
 ) -> None:
     """
     Execute the full AURUM pipeline and render results.
@@ -535,7 +669,7 @@ def _run_pipeline(
         1. Fetch OHLCV data via yfinance
         2. Compute technical indicators
         3. Parse strategy text → conditions list
-        4. Orchestrator evaluates conditions against data
+        4. Orchestrator evaluates conditions against data (parallel fan-out)
         5. Backtest engine simulates trades
         6. Render everything in the dashboard panels
     """
@@ -557,8 +691,9 @@ def _run_pipeline(
             st.error(f"Indicator computation failed: {exc}")
             return
 
-    # ── Step 3: Parse strategy ───────────────────────────────────────
+    # ── Step 3: Parse strategy (lazy import) ─────────────────────────
     with st.spinner("🧠 Parsing strategy…"):
+        StrategyParser = _get_parser()
         parser = StrategyParser()
         conditions = parser.parse_regex(strategy_text)
 
@@ -569,13 +704,15 @@ def _run_pipeline(
         )
         return
 
-    # ── Step 4: Orchestrator evaluation ──────────────────────────────
+    # ── Step 4: Orchestrator evaluation (lazy import + ThreadPoolExecutor) ──
     with st.spinner("🤖 Agents evaluating strategy…"):
+        OrchestratorAgent = _get_orchestrator()
         orchestrator = OrchestratorAgent()
         evaluation = orchestrator.evaluate_strategy(conditions, df)
 
-    # ── Step 5: Backtest ─────────────────────────────────────────────
+    # ── Step 5: Backtest (lazy import) ───────────────────────────────
     with st.spinner("⏳ Running backtest…"):
+        BacktestEngine = _get_backtest_engine()
         engine = BacktestEngine()
         backtest = engine.run(conditions, df)
 
@@ -595,10 +732,7 @@ def _run_pipeline(
 # ══════════════════════════════════════════════════════════════════════
 
 
-def _render_left_results(
-    col: st.delta_generator.DeltaGenerator,
-    evaluation: dict,
-) -> None:
+def _render_left_results(col, evaluation: dict) -> None:
     """Render score ring, agent cards, and conflict warnings in the left panel."""
     with col:
         st.markdown("---")
@@ -619,7 +753,7 @@ def _render_left_results(
         # ── Agent scorecard (metric cards) ───────────────────────────
         results = evaluation.get("individual_results", {})
         if results:
-            st.markdown(f"#### Agent Scores")
+            st.markdown("#### Agent Scores")
             agent_names = list(results.keys())
 
             # Lay out in rows of 3
@@ -638,7 +772,7 @@ def _render_left_results(
         # ── Conflicts ────────────────────────────────────────────────
         conflicts = evaluation.get("conflicts", [])
         if conflicts:
-            st.markdown(f"#### ⚠️ Conflicts Detected")
+            st.markdown("#### ⚠️ Conflicts Detected")
             for c in conflicts:
                 _render_conflict(c)
 
@@ -648,12 +782,7 @@ def _render_left_results(
 # ══════════════════════════════════════════════════════════════════════
 
 
-def _render_right_results(
-    col: st.delta_generator.DeltaGenerator,
-    df: pd.DataFrame,
-    evaluation: dict,
-    backtest: dict,
-) -> None:
+def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
     """Render tabs: Price Chart, Backtest Results, Agent Reports."""
     with col:
         tab_chart, tab_backtest, tab_reports = st.tabs(
@@ -663,14 +792,13 @@ def _render_right_results(
         # ── Tab 1: Candlestick chart ─────────────────────────────────
         with tab_chart:
             fig = _build_candlestick(df, n_days=90)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, key="price_chart")
 
         # ── Tab 2: Backtest Results ──────────────────────────────────
         with tab_backtest:
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 ret = backtest.get("total_return_pct", 0.0)
-                colour = "normal" if ret >= 0 else "inverse"
                 st.metric("Total Return", f"{ret:+.2f}%", delta=None)
             with m2:
                 st.metric("Win Rate", f"{backtest.get('win_rate', 0):.1f}%")
@@ -693,7 +821,7 @@ def _render_right_results(
             st.markdown("")
             st.markdown("##### Equity Curve")
             equity_fig = _build_equity_chart(backtest.get("equity_curve", {}))
-            st.plotly_chart(equity_fig, use_container_width=True)
+            st.plotly_chart(equity_fig, key="equity_chart")
 
         # ── Tab 3: Agent Reports ─────────────────────────────────────
         with tab_reports:
@@ -745,7 +873,7 @@ def _render_default_chart() -> None:
         df_raw = _fetch_history("1y")
         df = _compute_indicators(df_raw)
         fig = _build_candlestick(df, n_days=90)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, key="default_chart")
     except Exception:
         st.info("Enter a strategy and click **Evaluate** to begin.")
 
