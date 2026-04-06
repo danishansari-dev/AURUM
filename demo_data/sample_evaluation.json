@@ -1,0 +1,73 @@
+{
+  "evaluation": {
+    "final_score": 78.5,
+    "rating": "GOOD — Solid with minor improvements",
+    "individual_results": {
+      "RSI": {
+        "agent_name": "RSI",
+        "score": 85.0,
+        "win_rate": 0.62,
+        "feedback": ["RSI below 35 is a historically strong entry point."],
+        "suggestions": ["Consider lowering to 30 for higher probability but fewer trades."],
+        "action_alignment": "BUY"
+      },
+      "EMA": {
+        "agent_name": "EMA",
+        "score": 70.0,
+        "win_rate": 0.58,
+        "feedback": ["EMA20 crossing EMA50 represents bullish momentum."],
+        "suggestions": [],
+        "action_alignment": "BUY"
+      },
+      "MACD": {
+        "agent_name": "MACD",
+        "score": 80.0,
+        "win_rate": 0.60,
+        "feedback": ["MACD bullish crossover supports the underlying trend."],
+        "suggestions": ["Ensure histogram momentum is expanding."],
+        "action_alignment": "BUY"
+      },
+      "SMA": {
+        "agent_name": "SMA",
+        "score": 50.0,
+        "win_rate": 0.50,
+        "feedback": ["SMA200 shows long term trend is neutral."],
+        "suggestions": ["Trade with caution around the SMA200."],
+        "action_alignment": "NEUTRAL"
+      },
+      "Bollinger": {
+        "agent_name": "BB",
+        "score": 60.0,
+        "win_rate": 0.53,
+        "feedback": ["Price is inside the mid-band."],
+        "suggestions": ["Wait for lower band touch for better entries."],
+        "action_alignment": "NEUTRAL"
+      }
+    },
+    "conflicts": [],
+    "suggestions": [
+      "Consider lowering the RSI threshold from 35 to 30 for better risk/reward.",
+      "Add a trailing stop-loss to protect against sudden Gold volatility."
+    ],
+    "backtest_ready": true
+  },
+  "backtest": {
+    "total_return_pct": 14.5,
+    "win_rate": 62.1,
+    "sharpe_ratio": 1.25,
+    "max_drawdown_pct": 8.5,
+    "total_trades": 18,
+    "profit_factor": 1.6,
+    "final_value": 11450.0,
+    "equity_curve": {
+      "2023-01-01": 10000.0,
+      "2023-02-15": 10250.0,
+      "2023-04-10": 10100.0,
+      "2023-06-22": 10600.0,
+      "2023-08-30": 10450.0,
+      "2023-11-12": 10900.0,
+      "2024-01-05": 11050.0,
+      "2024-03-18": 11450.0
+    }
+  }
+}
