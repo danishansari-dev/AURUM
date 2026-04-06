@@ -18,7 +18,11 @@ Optimised for Replit free-tier:
 
 from __future__ import annotations
 
+# ── Must run before ANY numpy/scipy import to avoid OpenBLAS crash on Windows ──
 import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
