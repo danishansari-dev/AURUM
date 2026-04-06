@@ -1,17 +1,26 @@
-"""Master orchestrator that coordinates all specialist agents and resolves conflicts."""
+"""Master orchestrator that coordinates all specialist agents and resolves conflicts.
+
+Uses concurrent.futures.ThreadPoolExecutor for parallel agent evaluation (fan-out)
+and an AgentMessage protocol for auditable inter-agent communication.
+"""
 
 from __future__ import annotations
 
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from typing import Literal
 
 import pandas as pd
 
-from agents.base_agent import AgentResult
+from agents.base_agent import AgentMessage, AgentResult
 from agents.rsi_agent import RSIAgent
 from agents.ema_agent import EMAAgent
 from agents.sma_agent import SMAAgent
 from agents.macd_agent import MACDAgent
 from agents.bollinger_agent import BollingerAgent
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorAgent:
@@ -20,12 +29,18 @@ class OrchestratorAgent:
     appropriate specialist agent, detects inter-agent conflicts, computes a weighted
     final score, and returns a structured evaluation report.
 
-    Analogy: the managing director who delegates to department heads, collects their
-    reports, and synthesises the executive summary.
+    Orchestration pattern (synchronous fan-out):
+        User Input → StrategyParser.parse() → OrchestratorAgent
+            ├── RSIAgent.evaluate()       ─┐
+            ├── EMAAgent.evaluate()        │ ThreadPoolExecutor
+            ├── MACDAgent.evaluate()       │ (parallel, independent)
+            ├── SMAAgent.evaluate()        │
+            └── BollingerAgent.evaluate() ─┘
+                           ↓
+            detect_conflicts() → BacktestEngine.run() → final verdict
     """
 
     # Relative importance of each indicator for Gold (XAUUSD) evaluation.
-    # Weights are calibrated from academic literature and Gold-specific backtests.
     _AGENT_WEIGHTS: dict[str, float] = {
         "RSI": 0.25,
         "EMA": 0.22,
@@ -33,6 +48,9 @@ class OrchestratorAgent:
         "SMA": 0.15,
         "BB": 0.18,
     }
+
+    # ThreadPool size — 5 agents means 5 workers is ideal
+    _MAX_WORKERS: int = 5
 
     def __init__(self) -> None:
         """Instantiate every specialist agent once so they persist across evaluations."""
@@ -53,6 +71,9 @@ class OrchestratorAgent:
             "BOLLINGER": self._bollinger_agent,
         }
 
+        # Auditable log of every AgentMessage exchanged during an evaluation pass
+        self.message_log: list[AgentMessage] = []
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -63,11 +84,11 @@ class OrchestratorAgent:
         df: pd.DataFrame,
     ) -> dict:
         """
-        Full-pipeline strategy evaluation.
+        Full-pipeline strategy evaluation with parallel agent dispatch.
 
-        Dispatches every condition to its specialist agent, detects inter-agent
-        conflicts, computes a weighted final score, and assembles a structured
-        report suitable for the dashboard layer.
+        Dispatches every condition to its specialist agent using ThreadPoolExecutor,
+        detects inter-agent conflicts, computes a weighted final score, and assembles
+        a structured report suitable for the dashboard layer.
 
         Args:
             parsed_conditions: List of condition dicts produced by the StrategyParser.
@@ -83,32 +104,23 @@ class OrchestratorAgent:
                 - ``suggestions``       (list)   — aggregated, deduplicated suggestion strings.
                 - ``backtest_ready``    (bool)   — ``True`` when every condition produced a valid result.
         """
-        # --- Step 1: Route each condition to the correct specialist agent ---
-        individual_results: dict[str, AgentResult] = {}
+        # Clear message log for this evaluation pass
+        self.message_log = []
 
-        for condition in parsed_conditions:
-            indicator_key = str(condition.get("indicator", "")).upper()
-            agent = self._agents.get(indicator_key)
-            if agent is None:
-                # Skip unknown indicators gracefully
-                continue
-            try:
-                result = agent.evaluate_condition(condition, df)
-                # Use the canonical key from agent_name (e.g. "BB" not "BOLLINGER")
-                individual_results[result.agent_name] = result
-            except (ValueError, KeyError, IndexError) as exc:
-                # Record a zero-score sentinel so the dashboard can show which agent failed
-                individual_results[indicator_key] = AgentResult(
-                    agent_name=indicator_key,
-                    score=0.0,
-                    win_rate=0.0,
-                    feedback=[f"Evaluation failed: {exc}"],
-                    suggestions=["Fix the condition syntax and retry."],
-                    action_alignment="NEUTRAL",
-                )
+        # --- Step 1: Route each condition to the correct specialist agent (parallel) ---
+        individual_results = self._dispatch_conditions(parsed_conditions, df)
 
         # --- Step 2: Detect conflicts across agent results ---
         conflicts = self.detect_conflicts(individual_results)
+
+        # Log conflict messages
+        for conflict in conflicts:
+            self.message_log.append(AgentMessage(
+                sender="OrchestratorAgent",
+                receiver="Dashboard",
+                msg_type="CONFLICT_FLAG",
+                payload=conflict,
+            ))
 
         # --- Step 3: Compute weighted composite score ---
         weighted_score = self._compute_weighted_score(individual_results)
@@ -139,6 +151,99 @@ class OrchestratorAgent:
             "suggestions": suggestions,
             "backtest_ready": backtest_ready,
         }
+
+    # ------------------------------------------------------------------
+    # Parallel agent dispatch (fan-out via ThreadPoolExecutor)
+    # ------------------------------------------------------------------
+
+    def _dispatch_conditions(
+        self,
+        parsed_conditions: list[dict],
+        df: pd.DataFrame,
+    ) -> dict[str, AgentResult]:
+        """
+        Fan-out: dispatch each condition to its specialist agent in parallel.
+
+        Uses ThreadPoolExecutor for concurrent evaluation. Each agent is independent
+        and shares no state, so parallelism is safe and improves latency.
+
+        Args:
+            parsed_conditions: Parsed condition dicts from the StrategyParser.
+            df: OHLCV + indicator DataFrame.
+
+        Returns:
+            ``{agent_name: AgentResult}`` map for all successfully evaluated conditions.
+        """
+        individual_results: dict[str, AgentResult] = {}
+
+        # Build work items: (indicator_key, agent_instance, condition)
+        work_items: list[tuple[str, object, dict]] = []
+        for condition in parsed_conditions:
+            indicator_key = str(condition.get("indicator", "")).upper()
+            agent = self._agents.get(indicator_key)
+            if agent is None:
+                logger.warning("Unknown indicator '%s' — skipping.", indicator_key)
+                continue
+            work_items.append((indicator_key, agent, condition))
+
+        if not work_items:
+            return individual_results
+
+        # Fan-out with ThreadPoolExecutor for parallel agent evaluation
+        with ThreadPoolExecutor(max_workers=min(self._MAX_WORKERS, len(work_items))) as executor:
+            future_to_key = {
+                executor.submit(self._evaluate_single, agent, condition, df): indicator_key
+                for indicator_key, agent, condition in work_items
+            }
+
+            for future in as_completed(future_to_key):
+                indicator_key = future_to_key[future]
+                try:
+                    result = future.result()
+                    individual_results[result.agent_name] = result
+
+                    # Log successful SCORE message
+                    self.message_log.append(AgentMessage(
+                        sender=f"{result.agent_name}Agent",
+                        receiver="OrchestratorAgent",
+                        msg_type="SCORE",
+                        payload={
+                            "score": result.score,
+                            "win_rate": result.win_rate,
+                            "action": result.action_alignment,
+                        },
+                    ))
+                except (ValueError, KeyError, IndexError) as exc:
+                    logger.error("Agent %s failed: %s", indicator_key, exc)
+                    # Record a zero-score sentinel so the dashboard can show which agent failed
+                    individual_results[indicator_key] = AgentResult(
+                        agent_name=indicator_key,
+                        score=0.0,
+                        win_rate=0.0,
+                        feedback=[f"Evaluation failed: {exc}"],
+                        suggestions=["Fix the condition syntax and retry."],
+                        action_alignment="NEUTRAL",
+                    )
+
+        return individual_results
+
+    @staticmethod
+    def _evaluate_single(agent: object, condition: dict, df: pd.DataFrame) -> AgentResult:
+        """
+        Evaluate a single condition against a single agent.
+
+        Isolated as a static method to be safely submitted to ThreadPoolExecutor.
+        Each agent is stateless for evaluation so concurrent calls are safe.
+
+        Args:
+            agent: Specialist agent instance (RSIAgent, EMAAgent, etc.).
+            condition: Parsed condition dict.
+            df: OHLCV + indicator DataFrame.
+
+        Returns:
+            AgentResult from the specialist agent.
+        """
+        return agent.evaluate_condition(condition, df)
 
     # ------------------------------------------------------------------
     # Conflict detection
