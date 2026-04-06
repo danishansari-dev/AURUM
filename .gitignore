@@ -1,0 +1,37 @@
+# ── Python ──────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environment ─────────────────────────
+aurum_env/
+venv/
+.venv/
+env/
+
+# ── Environment / Secrets (NEVER commit keys) ───
+.env
+notes.md
+
+# ── IDE ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Data / Cache ────────────────────────────────
+*.db
+*.sqlite3
+*.h5
+ml/models/*.pkl
+
+# ── Streamlit ───────────────────────────────────
+.streamlit/
