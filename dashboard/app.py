@@ -46,6 +46,7 @@ if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # ══════════════════════════════════════════════════════════════════════
 # THEME CONSTANTS
@@ -303,7 +304,7 @@ def _get_indicator_calculator():
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def _fetch_gold_price() -> tuple[float | None, str]:
+def _fetch_gold_price():
     """
     Grab the latest Gold Futures close from yfinance.
 
@@ -612,10 +613,6 @@ def main() -> None:
     # ── Health check sidebar (always rendered) ───────────────────────
     _render_health_check()
 
-    # ── Header ───────────────────────────────────────────────────────
-    gold_price, _ = _fetch_gold_price()
-    price_str = f"${gold_price:,.2f}" if gold_price else "unavailable"
-
     st.markdown(
         f"""
         <div class="aurum-header">
@@ -624,10 +621,28 @@ def main() -> None:
                 Multi-agent AI system for evaluating, scoring, and backtesting
                 Gold (XAUUSD) trading strategies
             </p>
-            <span class="price-badge">🪙 Live Gold &nbsp;{price_str}</span>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+    # ── TradingView Live Preview ───────────────────────────────────────
+    components.html(
+        """
+        <div class="tradingview-widget-container">
+          <div class="tradingview-widget-container__widget"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-single-quote.js" async>
+          {
+          "symbol": "OANDA:XAUUSD",
+          "width": "100%",
+          "isTransparent": true,
+          "colorTheme": "dark",
+          "locale": "en"
+        }
+          </script>
+        </div>
+        """,
+        height=130,
     )
 
     # ── Two-panel layout ─────────────────────────────────────────────
