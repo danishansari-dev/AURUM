@@ -687,8 +687,52 @@ def _run_pipeline(
         5. Backtest engine simulates trades
         6. Render everything in the dashboard panels
     """
+    import os
+    import json
+    import time
+    from pathlib import Path
+
     period_map = {1: "1y", 2: "2y", 3: "3y", 4: "4y", 5: "5y"}
     period_str = period_map.get(period_years, "3y")
+
+    # ── DEMO MODE FALLBACK ───────────────────────────────────────────────
+    DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
+    if DEMO_MODE:
+        with st.spinner("🤖 [DEMO MODE] Evaluating and Backtesting Strategy..."):
+            time.sleep(2)  # Simulate processing delay
+            demo_file = Path(__file__).resolve().parent.parent / "demo_data" / "sample_evaluation.json"
+            try:
+                with open(demo_file, "r") as f:
+                    demo_data = json.load(f)
+                
+                # Reconstruct Pydantic models from dicts
+                from agents.base_agent import AgentResult
+                evaluation = demo_data["evaluation"]
+                for agent, result_dict in evaluation["individual_results"].items():
+                    evaluation["individual_results"][agent] = AgentResult(**result_dict)
+                backtest = demo_data["backtest"]
+
+                # Fetch real price data for chart if possible, else mock simple df
+                try:
+                    df = _compute_indicators(_fetch_history(period_str))
+                except Exception:
+                    # Generic empty df fallback to prevent UI crash
+                    import pandas as pd
+                    df = pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume", "EMA_20", "EMA_50"])
+
+                st.session_state["evaluation"] = evaluation
+                st.session_state["backtest"] = backtest
+                st.session_state["df"] = df
+                st.session_state["conditions"] = [{"indicator": "RSI", "operator": "<", "value": 35, "action": "BUY"}]
+                
+                _render_left_results(col_left, evaluation)
+                _render_right_results(col_right, df, evaluation, backtest)
+                return
+            except Exception as e:
+                st.error(f"Demo Mode Error: {e}")
+                import traceback
+                st.write(traceback.format_exc())
+                return
 
     # ── Step 1 & 2: Fetch + Indicators (cached) ─────────────────────
     with st.spinner("📡 Fetching Gold price data…"):
