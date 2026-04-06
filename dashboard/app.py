@@ -23,6 +23,16 @@ import os
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 
+# ── Load .env file for local API keys (safe no-op if file missing) ──
+try:
+    from pathlib import Path as _P
+    from dotenv import load_dotenv
+    _env_path = _P(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=True)
+except ImportError:
+    pass  # python-dotenv not installed — keys must be set manually
+
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
