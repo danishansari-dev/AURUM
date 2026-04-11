@@ -6,6 +6,16 @@ AURUM is an intelligent, multi-agent trading strategy evaluator designed specifi
 
 The system runs a rigorous historical backtest of the strategy over 5 years, detects conflicting signals between indicators, and produces a comprehensive scorecard with actionable suggestions. 
 
+### Academic Submission
+This project was developed as part of academic coursework under the supervision of **Dr. Chinmayananda A**. 
+
+**Group Members:**
+- Mohammad Danish Ansari (22BDS039)
+- Aashish Saini (22BEC002)
+- Ambrish Pandey (22BEC007)
+
+> **📝 Formal IEEE Report:** A comprehensive technical breakdown of the architecture, methodology, and results is available in the [`Project_Report_IEEE.md`](./Project_Report_IEEE.md) file.
+
 ![AURUM Dashboard Concept](https://img.shields.io/badge/Status-Active-success)
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B)
