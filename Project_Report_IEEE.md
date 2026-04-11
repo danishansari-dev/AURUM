@@ -15,7 +15,7 @@
 
 When retail traders try to use multiple technical indicators at once, they often get confusing or contradictory signals. To solve this, we built **AURUM**, an AI-powered system that lets you type out Gold (XAUUSD) trading strategies in plain English to see how well they actually work. 
 
-AURUM uses a hybrid parser (Regex combined with Claude AI) to break down these sentences and routes the rules to five separate "specialist agents"—one each for RSI, EMA, SMA, MACD, and Bollinger Bands. An Orchestrator then reviews their feedback, checks for logical conflicts (like buying when momentum is crashing), and gives the strategy a final score out of 100. At the same time, a high-speed backtesting engine runs the strategy through five years of historical data to calculate real-world metrics like Win Rate and Maximum Drawdown. 
+AURUM uses a hybrid parser (Regex combined with Claude AI) to break down these sentences and routes the rules to five separate "specialist agents" - one each for RSI, EMA, SMA, MACD, and Bollinger Bands. An Orchestrator then reviews their feedback, checks for logical conflicts (like buying when momentum is crashing), and gives the strategy a final score out of 100. At the same time, a high-speed backtesting engine runs the strategy through five years of historical data to calculate real-world metrics like Win Rate and Maximum Drawdown. 
 
 Everything is tied together in an interactive Streamlit dashboard. During our testing, AURUM successfully recognized famous, profitable setups like the Golden Cross, correctly penalized flawed strategies, and stopped contradictory trades that standard platforms blindly execute.
 
@@ -27,7 +27,7 @@ Everything is tied together in an interactive Streamlit dashboard. During our te
 
 ### 1.1 Background and Motivation
 
-The global foreign exchange and commodity markets process trillions of dollars in daily volume, with spot Gold (XAUUSD) consistently ranking among the most actively traded instruments [1]. Technical Analysis (TA), the practice of predicting future price movements from historical price and volume data using mathematical indicators, remains the predominant methodology among retail traders [2]. Indicators such as the Relative Strength Index (RSI) [3], Moving Average Convergence Divergence (MACD), Exponential Moving Average (EMA), Simple Moving Average (SMA), and Bollinger Bands each capture different facets of market behaviour — momentum, trend, and volatility respectively.
+The global foreign exchange and commodity markets process trillions of dollars in daily volume, with spot Gold (XAUUSD) consistently ranking among the most actively traded instruments [1]. Technical Analysis (TA), the practice of predicting future price movements from historical price and volume data using mathematical indicators, remains the predominant methodology among retail traders [2]. Indicators such as the Relative Strength Index (RSI) [3], Moving Average Convergence Divergence (MACD), Exponential Moving Average (EMA), Simple Moving Average (SMA), and Bollinger Bands each capture different facets of market behaviour  -  momentum, trend, and volatility respectively.
 
 However, the application of these indicators in isolation or in poorly-considered combinations introduces two fundamental problems that existing backtesting platforms fail to address adequately:
 
@@ -41,7 +41,7 @@ Retail traders and finance students designing multi-indicator trading strategies
 
 ### 1.3 Proposed Solution
 
-To address this gap, this paper introduces **AURUM** — an AI-powered, modular multi-agent framework in which each technical indicator is represented by an autonomous Specialist Agent. The system architecture follows the Multi-Agent System (MAS) paradigm [4], wherein agents operate independently on their respective indicator domains, communicate results through a typed message protocol, and delegate coordination to a central OrchestratorAgent. The Orchestrator performs weighted score aggregation, inter-agent conflict detection, and verdict generation. The complete pipeline — from natural language input to interactive dashboard output — executes within seconds, enabling rapid iterative strategy refinement.
+To address this gap, this paper introduces **AURUM**  -  an AI-powered, modular multi-agent framework in which each technical indicator is represented by an autonomous Specialist Agent. The system architecture follows the Multi-Agent System (MAS) paradigm [4], wherein agents operate independently on their respective indicator domains, communicate results through a typed message protocol, and delegate coordination to a central OrchestratorAgent. The Orchestrator performs weighted score aggregation, inter-agent conflict detection, and verdict generation. The complete pipeline  -  from natural language input to interactive dashboard output  -  executes within seconds, enabling rapid iterative strategy refinement.
 
 ### 1.4 Contributions
 
@@ -67,7 +67,7 @@ Multi-Agent Systems (MAS) have been extensively studied in computational finance
 
 ### 2.2 Technical Indicators for Gold
 
-Gold exhibits distinctive market microstructure characteristics — it functions simultaneously as a commodity, a currency, and a safe-haven asset — that influence the reliability of different technical indicators:
+Gold exhibits distinctive market microstructure characteristics  -  it functions simultaneously as a commodity, a currency, and a safe-haven asset  -  that influence the reliability of different technical indicators:
 
 - **RSI (Relative Strength Index):** Wilder [3] proposed RSI as a momentum oscillator bounded between 0 and 100. Conventional oversold (< 30) and overbought (> 70) thresholds are empirically effective on Gold due to its strong momentum-driven behaviour during geopolitical events.
 - **MACD (Moving Average Convergence Divergence):** Appel [7] designed MACD to capture momentum changes through the convergence and divergence of two exponential moving averages (default 12/26/9). MACD crossovers and divergences have demonstrated statistically significant predictive power on daily Gold charts.
@@ -225,7 +225,7 @@ A cross-version compatibility shim (`ta_compat.py`) imports `pandas_ta` when ava
 
 The `StrategyParser` class implements a two-tier parsing strategy:
 
-**Mode 1 — Regex Parser:** Twenty-two compiled regular expressions (compiled at class definition time for amortised cost) match canonical indicator phrases across six pattern categories:
+**Mode 1  -  Regex Parser:** Twenty-two compiled regular expressions (compiled at class definition time for amortised cost) match canonical indicator phrases across six pattern categories:
 
 - RSI threshold comparisons (`RSI below 30`, `RSI > 70`)
 - EMA crossovers (`EMA20 crosses above EMA50`)
@@ -236,11 +236,11 @@ The `StrategyParser` class implements a two-tier parsing strategy:
 
 Each match is coerced into a raw condition dict with standardised keys: `indicator`, `operator`, `value`, `fast`, `slow`, and `action`. Trade direction (`BUY`/`SELL`) is inferred from contextual keywords (`buy`, `long`, `bullish` → BUY; `sell`, `short`, `bearish` → SELL), defaulting to BUY when the text is ambiguous.
 
-**Mode 2 — Claude AI Fallback:** When the regex parser yields fewer than two conditions (indicating either a simple query or a complex sentence the patterns failed to capture), the system falls back to the Anthropic Claude API (`claude-sonnet-4-20250514`). The LLM receives a constrained system prompt instructing it to return only a JSON array of condition objects conforming to the `StrategyCondition` schema. The raw response is stripped of markdown code fences, the outermost `[...]` block is extracted, and the result is JSON-deserialized.
+**Mode 2  -  Claude AI Fallback:** When the regex parser yields fewer than two conditions (indicating either a simple query or a complex sentence the patterns failed to capture), the system falls back to the Anthropic Claude API (`claude-sonnet-4-20250514`). The LLM receives a constrained system prompt instructing it to return only a JSON array of condition objects conforming to the `StrategyCondition` schema. The raw response is stripped of markdown code fences, the outermost `[...]` block is extracted, and the result is JSON-deserialized.
 
 #### 4.3.2 Pydantic Validation
 
-Every raw condition dict — whether from regex or LLM — passes through the `StrategyCondition` Pydantic model:
+Every raw condition dict  -  whether from regex or LLM  -  passes through the `StrategyCondition` Pydantic model:
 
 ```python
 class StrategyCondition(BaseModel):
@@ -266,7 +266,7 @@ The RSI Agent evaluates momentum conditions through three scoring components:
 
 2. **Historical Win-Rate Estimation (40 points):** The agent scans all historical bars where the RSI condition was satisfied, then measures the fraction of setups where the `close` price moved at least 0.5% in the signal direction within a 5-bar forward horizon. The win-rate fraction is multiplied by 40 to yield the ML component score.
 
-3. **Divergence Detection (20 points):** The agent inspects the most recent 20 bars for classic RSI-price divergence patterns. For BUY: bullish divergence is detected when price makes a lower low while RSI makes a higher low across two identified swing troughs. For SELL: bearish divergence requires higher price highs with lower RSI highs. Detection uses a dual-pass algorithm — first attempting trough/peak identification via local minima/maxima, then falling back to half-window comparison.
+3. **Divergence Detection (20 points):** The agent inspects the most recent 20 bars for classic RSI-price divergence patterns. For BUY: bullish divergence is detected when price makes a lower low while RSI makes a higher low across two identified swing troughs. For SELL: bearish divergence requires higher price highs with lower RSI highs. Detection uses a dual-pass algorithm  -  first attempting trough/peak identification via local minima/maxima, then falling back to half-window comparison.
 
 **Action Alignment:** If the composite score exceeds 55, the agent aligns with the condition's action direction (BUY or SELL); otherwise, it reports NEUTRAL, signalling insufficient conviction to influence the Orchestrator's conflict analysis.
 
@@ -274,7 +274,7 @@ The RSI Agent evaluates momentum conditions through three scoring components:
 
 The MACD Agent evaluates crossover and histogram-based conditions:
 
-1. **Rule-Based Credit (40 points):** Points are awarded based on three independent checks — MACD line vs. signal line position (20 points for alignment with action), histogram polarity (10 points), and MACD position relative to the zero line (10 points for strong trend confirmation).
+1. **Rule-Based Credit (40 points):** Points are awarded based on three independent checks  -  MACD line vs. signal line position (20 points for alignment with action), histogram polarity (10 points), and MACD position relative to the zero line (10 points for strong trend confirmation).
 
 2. **Historical Win-Rate (40 points):** The agent builds a boolean mask from histogram polarity (`hist > 0` for BUY, `hist < 0` for SELL) and measures the 5-bar, 0.5% forward success rate identically to the RSI Agent.
 
@@ -286,7 +286,7 @@ Additionally, the agent exposes a standalone `is_bearish_crossover()` method tha
 
 The EMA Agent (source: `ema_agent.py`, 283 lines) evaluates two condition subtypes:
 
-- **Crossover Conditions:** Compares fast EMA (e.g., EMA20) against slow EMA (e.g., EMA50). The agent recognises canonical combinations — (9,21) for scalping, (20,50) for short-medium crossovers, and (50,200) for the Golden/Death Cross — and assigns base scores reflecting their empirical reliability on Gold.
+- **Crossover Conditions:** Compares fast EMA (e.g., EMA20) against slow EMA (e.g., EMA50). The agent recognises canonical combinations  -  (9,21) for scalping, (20,50) for short-medium crossovers, and (50,200) for the Golden/Death Cross  -  and assigns base scores reflecting their empirical reliability on Gold.
 
 - **Price-vs-EMA Conditions:** Evaluates whether the close price is above or below a specified EMA, with supplementary slope analysis measuring the EMA's directional slope over a 5-bar lookback to grade trend strength (strong, moderate, weak, or flat).
 
@@ -302,7 +302,7 @@ The Bollinger Agent evaluates price position within the Bollinger Band envelope:
 
 2. **Historical Win-Rate (40 points):** Band-touch events (close ≤ lower for BUY, close ≥ upper for SELL) are evaluated on the 5-bar, 0.5% forward horizon.
 
-3. **Squeeze Detection (20 points):** The agent computes the `bb_bandwidth` as `(upper - lower) / middle` and compares the current bandwidth to its 50-bar rolling distribution. A bandwidth below the 20th percentile signals a Bollinger Squeeze — a volatility contraction that historically precedes explosive directional breakouts — earning a full 20 points.
+3. **Squeeze Detection (20 points):** The agent computes the `bb_bandwidth` as `(upper - lower) / middle` and compares the current bandwidth to its 50-bar rolling distribution. A bandwidth below the 20th percentile signals a Bollinger Squeeze  -  a volatility contraction that historically precedes explosive directional breakouts  -  earning a full 20 points.
 
 ### 4.5 Orchestrator Agent
 
@@ -346,17 +346,17 @@ Final Score = Σ(Agent_Score_i × Weight_i) / Σ(Weight_i)    for all participat
 
 The Orchestrator's `detect_conflicts()` method implements three pattern-matching checks:
 
-1. **Action Alignment Mismatch (HIGH severity):** Any agents signalling BUY while others signal SELL (excluding NEUTRAL agents) generates a HIGH-severity conflict. This is the most critical contradiction — it means the strategy is internally self-defeating.
+1. **Action Alignment Mismatch (HIGH severity):** Any agents signalling BUY while others signal SELL (excluding NEUTRAL agents) generates a HIGH-severity conflict. This is the most critical contradiction  -  it means the strategy is internally self-defeating.
 
 2. **RSI Overbought + EMA Uptrend (MEDIUM severity):** Triggered when the RSI Agent reports a value above 70 (exhaustion/overbought) while the EMA Agent aligns BUY (uptrend). This pattern signals elevated reversal risk despite a technically intact trend.
 
-3. **MACD Bearish + RSI Oversold (MEDIUM severity):** Triggered when the MACD Agent aligns SELL (bearish momentum) while RSI is below 30 (oversold). This ambiguity — momentum collapse versus washed-out conditions — requires human judgement.
+3. **MACD Bearish + RSI Oversold (MEDIUM severity):** Triggered when the MACD Agent aligns SELL (bearish momentum) while RSI is below 30 (oversold). This ambiguity  -  momentum collapse versus washed-out conditions  -  requires human judgement.
 
 **Conflict Penalties:** HIGH-severity conflicts degrade the composite score by 15% per conflict (clamped to a minimum 50% retention). MEDIUM-severity conflicts apply a 5% penalty per conflict (clamped to 70% retention).
 
 #### 4.5.4 Suggestion Aggregation
 
-Suggestions from all agents and conflict warnings are collected, deduplicated, and priority-ordered — conflict-derived suggestions appear first, followed by agent-level recommendations. This produces an actionable checklist for the trader.
+Suggestions from all agents and conflict warnings are collected, deduplicated, and priority-ordered  -  conflict-derived suggestions appear first, followed by agent-level recommendations. This produces an actionable checklist for the trader.
 
 ### 4.6 Backtesting Engine
 
@@ -372,7 +372,7 @@ The `BacktestEngine` class performs vectorised strategy simulation. The engine o
 
 #### 4.6.1 Signal Mask Construction
 
-Each parsed condition is translated into a boolean `pd.Series` mask via the `_condition_mask()` method, which dynamically computes any missing indicators using `pandas-ta`. All condition masks are combined with AND logic to produce a composite entry mask — a trade fires only when **every** condition is simultaneously satisfied.
+Each parsed condition is translated into a boolean `pd.Series` mask via the `_condition_mask()` method, which dynamically computes any missing indicators using `pandas-ta`. All condition masks are combined with AND logic to produce a composite entry mask  -  a trade fires only when **every** condition is simultaneously satisfied.
 
 The engine supports five indicator mask types:
 - **RSI:** Direct threshold comparison against the RSI column.
@@ -382,7 +382,7 @@ The engine supports five indicator mask types:
 
 #### 4.6.2 Trade Simulation
 
-The `_simulate_trades()` method walks the signal mask sequentially, opening positions at each signal bar and closing them after the `FORWARD_HOLD` period. No overlapping trades are permitted — the index advances past the hold period before scanning for the next signal. Per-trade return is computed as:
+The `_simulate_trades()` method walks the signal mask sequentially, opening positions at each signal bar and closing them after the `FORWARD_HOLD` period. No overlapping trades are permitted  -  the index advances past the hold period before scanning for the next signal. Per-trade return is computed as:
 
 ```
 BUY return  = (exit_price - entry_price) / entry_price - commission
@@ -451,21 +451,21 @@ The AURUM system was validated against a corpus of test scenarios spanning stand
 
 #### 5.1.1 Standard Strategy Evaluation
 
-**Test Case 1 — Golden Cross (SMA 50/200):**
+**Test Case 1  -  Golden Cross (SMA 50/200):**
 The canonical "Buy when SMA50 crosses above SMA200" strategy was correctly parsed into a single SMA crossover condition. The SMA Agent recognised the (50, 200) combination as the highest-reliability crossover pattern and awarded correspondingly high rule-based credit. The composite score fell within the GOOD to EXCELLENT band (70–85), consistent with the empirical track record of the Golden Cross on Gold over the 2019–2024 period.
 
-**Test Case 2 — Multi-Indicator Confluence:**
+**Test Case 2  -  Multi-Indicator Confluence:**
 The strategy "Buy Gold when RSI is below 35 and EMA20 crosses above EMA50 and MACD bullish crossover" was correctly decomposed into three conditions routed to three specialist agents. All three agents aligned BUY, yielding no conflicts. The Orchestrator's weighted aggregation produced a composite score reflecting the confluence of momentum (RSI), trend (EMA), and momentum-confirmation (MACD) signals.
 
 #### 5.1.2 Contrarian Strategy Penalisation
 
-**Test Case 3 — Buying Overbought:**
+**Test Case 3  -  Buying Overbought:**
 The adversarial strategy "Buy when RSI > 80" was correctly penalised by the RSI Agent. The rule-based scoring component awarded 0 points (RSI > 80 in BUY context maps to the "Not Oversold" zone). Historical win-rate analysis confirmed that buying at RSI > 80 on Gold yields sub-50% success rates, resulting in a WEAK or POOR final rating with targeted improvement suggestions ("Try RSI < 30 for classic oversold").
 
 #### 5.1.3 Conflict Detection
 
-**Test Case 4 — RSI Oversold + MACD Bearish:**
-When tested with "Buy when RSI below 30 and MACD bearish crossover", the parser correctly generated two conditions — RSI (BUY-direction) and MACD (SELL-direction due to bearish crossover). The Orchestrator detected an action-alignment mismatch (HIGH severity) between the RSI Agent (BUY alignment due to oversold conditions) and the MACD Agent (SELL alignment due to bearish momentum), issued a descriptive warning explaining the contradiction, and applied a 15% score penalty.
+**Test Case 4  -  RSI Oversold + MACD Bearish:**
+When tested with "Buy when RSI below 30 and MACD bearish crossover", the parser correctly generated two conditions  -  RSI (BUY-direction) and MACD (SELL-direction due to bearish crossover). The Orchestrator detected an action-alignment mismatch (HIGH severity) between the RSI Agent (BUY alignment due to oversold conditions) and the MACD Agent (SELL alignment due to bearish momentum), issued a descriptive warning explaining the contradiction, and applied a 15% score penalty.
 
 ### 5.2 Performance Characteristics
 
@@ -501,7 +501,7 @@ One limitation of the current backtest design is the fixed 5-bar forward hold pe
 
 ### 6.1 Conclusion
 
-This paper presented AURUM, a multi-agent artificial intelligence system that bridges the gap between raw backtesting mathematics and explainable trading strategy evaluation for the Gold (XAUUSD) market. By decomposing strategy analysis into five autonomous Specialist Agents — each independently scoring conditions through a uniform three-component model of rules, historical validation, and divergence detection — the system provides granular, per-indicator feedback that empowers traders to understand not merely *whether* a strategy works, but *why* it succeeds or fails at each indicator level.
+This paper presented AURUM, a multi-agent artificial intelligence system that bridges the gap between raw backtesting mathematics and explainable trading strategy evaluation for the Gold (XAUUSD) market. By decomposing strategy analysis into five autonomous Specialist Agents  -  each independently scoring conditions through a uniform three-component model of rules, historical validation, and divergence detection  -  the system provides granular, per-indicator feedback that empowers traders to understand not merely *whether* a strategy works, but *why* it succeeds or fails at each indicator level.
 
 The concurrent orchestration architecture, dual-mode NLP parser, multi-pattern conflict detection subsystem, and vectorised backtesting engine collectively deliver end-to-end strategy evaluation within 2–4 seconds, enabling rapid iterative refinement. The interactive Streamlit dashboard presents this analysis through an integrated interface combining live price data, agent scorecards, conflict warnings, quantitative backtest metrics, and actionable improvement suggestions.
 
@@ -529,7 +529,7 @@ Empirical validation confirmed that AURUM correctly classifies canonical high-pr
 |---|---|---|---|
 | Language | Python | ≥ 3.10 | Core runtime |
 | Data (Historical) | yfinance | ≥ 0.2.40 | Multi-year daily OHLCV for XAUUSD |
-| Data (Real-time) | Alpha Vantage API | — | Live XAU/USD exchange rate |
+| Data (Real-time) | Alpha Vantage API |  -  | Live XAU/USD exchange rate |
 | Data (Cache) | SQLite | built-in | Persistent OHLCV and indicator cache |
 | Indicators | pandas-ta | ≥ 0.3.14b0 | RSI, EMA, SMA, MACD, Bollinger Bands |
 | Validation | Pydantic | ≥ 2.6.0 | Condition and result schema enforcement |
