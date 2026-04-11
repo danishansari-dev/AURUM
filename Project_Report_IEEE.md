@@ -7,11 +7,17 @@
 - Aashish Saini (22BEC002)
 - Ambrish Pandey (22BEC007)
 
+**GitHub Repository:** [https://github.com/danishansari-dev/AURUM](https://github.com/danishansari-dev/AURUM)
+
 ---
 
 ## Abstract
 
-The proliferation of retail trading in commodity markets has exposed a critical gap between the availability of technical analysis tools and the capacity of novice traders to interpret conflicting signals from multiple indicators simultaneously. This paper presents **AURUM**, a modular multi-agent artificial intelligence system that evaluates, scores, and backtests user-defined Gold (XAUUSD) trading strategies through a pipeline of five specialist agents—RSI, EMA, SMA, MACD, and Bollinger Bands—each encapsulating domain-specific knowledge about a single technical indicator. The system accepts trading strategies expressed in natural language, parses them via a dual-mode engine that combines deterministic regex pattern matching with a Claude LLM fallback, routes parsed conditions to specialist agents through a concurrent fan-out orchestrator, detects inter-agent directional conflicts, and synthesises a weighted composite score normalised to a 0–100 scale. A vectorised backtesting engine simulates non-overlapping trades across up to five years of daily OHLCV data fetched from yfinance, producing quantitative performance metrics including Sharpe Ratio, Win Rate, Maximum Drawdown, and Profit Factor. An interactive Streamlit dashboard renders the evaluation pipeline's output through Plotly-powered candlestick charts, equity curves, and per-agent scorecard panels. Empirical testing demonstrates that AURUM correctly classifies canonical high-probability setups such as the Golden Cross (SMA 50/200 crossover) as EXCELLENT while appropriately penalising contrarian configurations, and successfully intercepts contradictory multi-indicator strategies via its conflict detection subsystem.
+When retail traders try to use multiple technical indicators at once, they often get confusing or contradictory signals. To solve this, we built **AURUM**, an AI-powered system that lets you type out Gold (XAUUSD) trading strategies in plain English to see how well they actually work. 
+
+AURUM uses a hybrid parser (Regex combined with Claude AI) to break down these sentences and routes the rules to five separate "specialist agents"—one each for RSI, EMA, SMA, MACD, and Bollinger Bands. An Orchestrator then reviews their feedback, checks for logical conflicts (like buying when momentum is crashing), and gives the strategy a final score out of 100. At the same time, a high-speed backtesting engine runs the strategy through five years of historical data to calculate real-world metrics like Win Rate and Maximum Drawdown. 
+
+Everything is tied together in an interactive Streamlit dashboard. During our testing, AURUM successfully recognized famous, profitable setups like the Golden Cross, correctly penalized flawed strategies, and stopped contradictory trades that standard platforms blindly execute.
 
 **Keywords:** Multi-Agent System, Technical Analysis, XAUUSD Gold, Natural Language Processing, Backtesting, Strategy Evaluation, Conflict Detection, Streamlit Dashboard.
 
@@ -543,8 +549,6 @@ Empirical validation confirmed that AURUM correctly classifies canonical high-pr
 
 The complete source code, documentation, and deployment configuration files for AURUM are publicly available at:
 
-**Repository:** [https://github.com/danishansari-dev/AURUM](https://github.com/danishansari-dev/AURUM)
-
 **Directory Structure:**
 
 ```
@@ -591,14 +595,4 @@ AURUM/
 
 [7] G. Appel, *Technical Analysis: Power Tools for Active Investors*. Upper Saddle River, NJ, USA: FT Press, 2005.
 
-[8] J. Bollinger, *Bollinger on Bollinger Bands*. New York, NY, USA: McGraw-Hill, 2001.
-
-[9] O. Polakow, "vectorbt: Fast, vectorized backtesting in Python," GitHub Repository, 2020. [Online]. Available: https://github.com/polakowo/vectorbt
-
-[10] W. McKinney, "Data Structures for Statistical Computing in Python," in *Proc. 9th Python in Science Conf.*, Austin, TX, USA, 2010, pp. 51–56.
-
-[11] Anthropic, "Claude API Documentation — Advanced Natural Language Reasoning," 2024. [Online]. Available: https://docs.anthropic.com
-
-[12] S. Hochreiter and J. Schmidhuber, "Long short-term memory," *Neural Computation*, vol. 9, no. 8, pp. 1735–1780, 1997.
-
-
+[8] O. Polakow, "vectorbt: Fast, vectorized backtesting in Python," GitHub Repository, 2020. [Online]. Available: https://github.com/polakowo/vectorbt
