@@ -493,7 +493,8 @@ def _render_health_check() -> None:
         except (ValueError, TypeError):
             st.caption(fetch_ts)
 
-        st.markdown("**Gold Spot Price (Live)**")
+        st.markdown("**Gold Proxy (PAXG/USDT — Live)**")
+        st.caption("Live price sourced from Binance PAXG/USDT. Chart data uses GC=F Gold Futures — prices may differ by $5–15.")
         components.html(
             """
             <div id="price-container">
@@ -1238,6 +1239,18 @@ def _run_pipeline(
             risk_reward_ratio=2.0,
         )
 
+    # BUG-007 — Calibrate score with backtest output if trades exist
+    agent_score = evaluation.get("final_score", 0.0)
+    total_trades = backtest.get("total_trades", 0)
+    backtest_accuracy = backtest.get("accuracy", 0.0) / 100.0  # Ensure fraction
+
+    if total_trades > 0:
+        display_score = round(0.6 * agent_score + 0.4 * (backtest_accuracy * 100), 1)
+        evaluation["final_score"] = display_score
+        score_warning = ""
+    else:
+        score_warning = "Score based on signal analysis only — no trades generated for calibration."
+
     # Store results in session state for persistence across reruns
     st.session_state["evaluation"] = evaluation
     st.session_state["backtest"] = backtest
@@ -1245,7 +1258,7 @@ def _run_pipeline(
     st.session_state["conditions"] = conditions
 
     # ── Render results ───────────────────────────────────────────────
-    _render_left_results(col_left, evaluation)
+    _render_left_results(col_left, evaluation, score_warning)
     _render_right_results(col_right, df, evaluation, backtest)
 
 
@@ -1254,7 +1267,7 @@ def _run_pipeline(
 # ══════════════════════════════════════════════════════════════════════
 
 
-def _render_left_results(col, evaluation: dict) -> None:
+def _render_left_results(col, evaluation: dict, score_warning: str = "") -> None:
     """Render SVG score gauge, custom agent cards, and conflict warnings in the left panel."""
     with col:
         st.markdown("---")
@@ -1263,6 +1276,9 @@ def _render_left_results(col, evaluation: dict) -> None:
         final_score = evaluation.get("final_score", 0.0)
         rating = evaluation.get("rating", "")
         _render_score_gauge(final_score, rating)
+
+        if score_warning:
+            st.warning(f"⚠️ {score_warning}")
 
         # ── Agent score cards (custom HTML, no truncation) ───────────
         results = evaluation.get("individual_results", {})
