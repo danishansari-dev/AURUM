@@ -835,7 +835,7 @@ class BacktestEngine:
         max_drawdown_pct = self._calc_max_drawdown(equity_curve)
 
         # --- Sharpe ratio (annualised using daily PnL, risk_free = 0) ---
-        sharpe = self._calc_sharpe(trades)
+        sharpe = self._calc_sharpe(trades, frame)
 
         # --- Streak analysis ---
         max_win_streak, max_loss_streak, current_streak = self._calc_streaks(trades)
@@ -902,15 +902,18 @@ class BacktestEngine:
         return max_dd
 
     @staticmethod
-    def _calc_sharpe(trades: List[TradeRecord]) -> float:
+    def _calc_sharpe(trades: List[TradeRecord], df: Optional[pd.DataFrame] = None) -> float:
         """
         Annualised Sharpe ratio using per-trade PnL percentage, risk-free = 0.
 
-        Groups trades by calendar day and aggregates daily returns for the
-        Sharpe calculation, then annualises with sqrt(252).
+        Calculates annualisation correctly based on data frequency:
+        Daily → sqrt(252)
+        Hourly → sqrt(252 × 6.5) ≈ sqrt(1638)
+        4H → sqrt(252 × 1.625) ≈ sqrt(409.5)
 
         Args:
             trades: Completed trade records.
+            df: Optional DataFrame with DatetimeIndex for frequency detection.
 
         Returns:
             Annualised Sharpe ratio, rounded to 2 decimal places.
@@ -918,10 +921,9 @@ class BacktestEngine:
         if len(trades) < 2:
             return 0.0
 
-        # Group PnL by exit date for daily aggregation
+        # Group PnL by exit date for daily/periodic aggregation
         daily_pnl: Dict[str, float] = {}
         for t in trades:
-            # Extract date portion from exit_time
             exit_date = t.exit_time[:10]
             daily_pnl[exit_date] = daily_pnl.get(exit_date, 0.0) + t.pnl_pct
 
@@ -937,7 +939,18 @@ class BacktestEngine:
         if std_r == 0:
             return 0.0
 
-        sharpe = (mean_r / std_r) * math.sqrt(252)
+        # Determine correct annualisation factor based on timeframe (BUG-013)
+        annual_factor = math.sqrt(252)  # Default: daily
+        if df is not None and len(df) >= 3:
+            deltas = pd.Series(df.index).diff().dropna()
+            median_hours = deltas.median().total_seconds() / 3600.0
+            
+            if median_hours <= 1.5:  # Hourly or lower
+                annual_factor = math.sqrt(1638)
+            elif median_hours <= 6.0:  # 4H data
+                annual_factor = math.sqrt(409.5)
+
+        sharpe = (mean_r / std_r) * annual_factor
         return round(sharpe, 2)
 
     @staticmethod
