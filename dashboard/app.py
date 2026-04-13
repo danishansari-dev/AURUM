@@ -385,11 +385,112 @@ def _render_health_check() -> None:
         except (ValueError, TypeError):
             st.caption(fetch_ts)
 
-        st.markdown("**Gold Spot Price**")
-        if gold_price is not None:
-            st.metric("GC=F", f"${gold_price:,.2f}")
-        else:
-            st.error("Unavailable")
+        st.markdown("**Gold Spot Price (Live)**")
+        components.html(
+            """
+            <div id="price-container">
+                <span id="price-symbol">XAUUSD</span>
+                <span id="price-value" class="text-neutral">Connecting...</span>
+                <span id="price-arrow"></span>
+            </div>
+            <script>
+                const priceValue = document.getElementById("price-value");
+                const priceArrow = document.getElementById("price-arrow");
+                let lastPrice = null;
+
+                // Using Binance paxgusdt ticker as a highly reliable, free, zero-latency 
+                // proxy for real-time XAUUSD spot prices without needing API keys.
+                const ws = new WebSocket("wss://stream.binance.com:9443/ws/paxgusdt@ticker");
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    const currentPrice = parseFloat(data.c);
+                    
+                    if (lastPrice === null) {
+                        lastPrice = currentPrice;
+                        priceValue.textContent = "$" + currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        return;
+                    }
+                    if (currentPrice === lastPrice) return;
+                    
+                    priceValue.textContent = "$" + currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                    
+                    priceValue.classList.remove("flash-green", "flash-red", "text-up", "text-down", "text-neutral");
+                    void priceValue.offsetWidth; // Force reflow to restart animation
+                    
+                    if (currentPrice > lastPrice) {
+                        priceValue.classList.add("flash-green", "text-up");
+                        priceArrow.textContent = "▲";
+                        priceArrow.className = "arrow-up";
+                    } else if (currentPrice < lastPrice) {
+                        priceValue.classList.add("flash-red", "text-down");
+                        priceArrow.textContent = "▼";
+                        priceArrow.className = "arrow-down";
+                    } else {
+                        priceValue.classList.add("text-neutral");
+                        priceArrow.textContent = "";
+                    }
+                    
+                    lastPrice = currentPrice;
+                };
+            </script>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: transparent;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                }
+                #price-container {
+                    background: #161B22; 
+                    border: 1px solid #30363d;
+                    border-radius: 12px;
+                    padding: 14px 20px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    color: #E6EDF3;
+                    box-sizing: border-box;
+                    width: 100%;
+                }
+                #price-symbol {
+                    color: #8B949E;
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                    margin-right: auto;
+                }
+                #price-value {
+                    font-size: 1.6rem;
+                    font-weight: 700;
+                    transition: color 0.8s ease-out;
+                }
+                #price-arrow {
+                    font-size: 1.2rem;
+                    font-weight: 700;
+                }
+                
+                .arrow-up { color: #00FF88; }
+                .arrow-down { color: #FF4444; }
+                
+                .text-up { color: #87e0b5 !important; }
+                .text-down { color: #e88b8b !important; }
+                .text-neutral { color: #E6EDF3 !important; }
+                
+                .flash-green { animation: flashGreen 1.2s ease-out forwards; }
+                .flash-red { animation: flashRed 1.2s ease-out forwards; }
+                
+                @keyframes flashGreen {
+                    0% { color: #00FF88; text-shadow: 0 0 10px rgba(0, 255, 136, 0.6); }
+                    100% { color: #87e0b5; text-shadow: none; }
+                }
+                @keyframes flashRed {
+                    0% { color: #FF4444; text-shadow: 0 0 10px rgba(255, 68, 68, 0.6); }
+                    100% { color: #e88b8b; text-shadow: none; }
+                }
+            </style>
+            """,
+            height=85,
+        )
 
         st.markdown("---")
 
@@ -515,12 +616,16 @@ def _build_candlestick(df, n_days: int = 90):
     return fig
 
 
-def _build_equity_chart(equity_curve: dict[str, float]):
+def _build_equity_chart(equity_curve):
     """
     Build a themed equity-curve line chart from the backtest engine output.
 
+    Accepts either a dict ``{date_string: value}`` or a list ``[value, ...]``.
+    The engine returns a list of cumulative PnL in pips; we convert to a
+    dollar-based equity starting at $10,000.
+
     Args:
-        equity_curve: ``{date_string: equity_value}`` mapping.
+        equity_curve: Cumulative PnL list or date-keyed dict.
 
     Returns:
         Plotly Figure.
@@ -548,8 +653,16 @@ def _build_equity_chart(equity_curve: dict[str, float]):
         )
         return fig
 
-    dates = list(equity_curve.keys())
-    values = list(equity_curve.values())
+    # Normalise: engine returns list[float] (cumulative pip PnL), dashboard
+    # may also receive dict[str, float] from demo mode.
+    if isinstance(equity_curve, dict):
+        dates = list(equity_curve.keys())
+        values = list(equity_curve.values())
+    else:
+        # List of cumulative pip PnL → convert to dollar equity from $10k base
+        base = 10_000.0
+        values = [base + v for v in equity_curve]
+        dates = list(range(1, len(values) + 1))  # trade sequence number
 
     # Determine gain/loss colour
     line_colour = _GREEN if values[-1] >= values[0] else _RED
@@ -573,7 +686,7 @@ def _build_equity_chart(equity_curve: dict[str, float]):
         font_color=_TEXT,
         height=350,
         margin=dict(l=0, r=0, t=30, b=0),
-        xaxis=dict(gridcolor="#21262d", title="Date"),
+        xaxis=dict(gridcolor="#21262d", title="Trade #" if isinstance(equity_curve, list) else "Date"),
         yaxis=dict(gridcolor="#21262d", title="Equity (USD)"),
     )
     return fig
@@ -784,10 +897,16 @@ def _run_pipeline(
         evaluation = orchestrator.evaluate_strategy(conditions, df)
 
     # ── Step 5: Backtest (lazy import) ───────────────────────────────
+    # Default SL/TP config — conservative 1.5% stop with 2:1 reward-risk
     with st.spinner("⏳ Running backtest…"):
         BacktestEngine = _get_backtest_engine()
         engine = BacktestEngine()
-        backtest = engine.run(conditions, df)
+        backtest = engine.run(
+            df=df,
+            conditions=conditions,
+            stop_loss_config={"type": "percentage", "value": 1.5},
+            risk_reward_ratio=2.0,
+        )
 
     # Store results in session state for persistence across reruns
     st.session_state["evaluation"] = evaluation
@@ -869,12 +988,14 @@ def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
 
         # ── Tab 2: Backtest Results ──────────────────────────────────
         with tab_backtest:
+            # Map engine output keys to dashboard display names.
+            # Engine uses: accuracy (%), net_pnl_pct, net_pnl_pips, equity_curve (list)
             m1, m2, m3, m4 = st.columns(4)
             with m1:
-                ret = backtest.get("total_return_pct", 0.0)
+                ret = backtest.get("net_pnl_pct", 0.0)
                 st.metric("Total Return", f"{ret:+.2f}%", delta=None)
             with m2:
-                st.metric("Win Rate", f"{backtest.get('win_rate', 0):.1f}%")
+                st.metric("Win Rate", f"{backtest.get('accuracy', 0):.1f}%")
             with m3:
                 st.metric("Sharpe Ratio", f"{backtest.get('sharpe_ratio', 0):.2f}")
             with m4:
@@ -886,14 +1007,17 @@ def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
                 st.metric("Total Trades", backtest.get("total_trades", 0))
             with m6:
                 pf = backtest.get("profit_factor", 0)
-                pf_str = f"{pf:.2f}" if pf != float("inf") else "∞"
+                pf_str = f"{pf:.2f}" if pf != float("inf") else "\u221e"
                 st.metric("Profit Factor", pf_str)
             with m7:
-                st.metric("Final Value", f"${backtest.get('final_value', 10000):,.2f}")
+                # Compute final equity from pip-based equity curve
+                eq = backtest.get("equity_curve", [])
+                final_val = 10_000.0 + eq[-1] if eq else 10_000.0
+                st.metric("Final Value", f"${final_val:,.2f}")
 
             st.markdown("")
             st.markdown("##### Equity Curve")
-            equity_fig = _build_equity_chart(backtest.get("equity_curve", {}))
+            equity_fig = _build_equity_chart(backtest.get("equity_curve", []))
             st.plotly_chart(equity_fig, key="equity_chart")
 
         # ── Tab 3: Agent Reports ─────────────────────────────────────
