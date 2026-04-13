@@ -11,7 +11,7 @@ import requests
 import yfinance as yf
 
 # Yahoo Finance symbol for spot gold vs USD (daily OHLCV).
-_XAUUSD_YF_SYMBOL: str = "XAUUSD=X"
+_XAUUSD_YF_SYMBOL: str = "GC=F"
 
 # Alpha Vantage physical currency pair for gold (XAU) priced in USD.
 _AV_BASE_URL: str = "https://www.alphavantage.co/query"
