@@ -14,8 +14,8 @@ venv/
 env/
 
 # ── Environment / Secrets (NEVER commit keys) ───
-.env
-notes.md
+# .env
+# notes.md
 
 # ── IDE ─────────────────────────────────────────
 .vscode/
