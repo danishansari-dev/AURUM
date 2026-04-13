@@ -16,6 +16,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
+# Opt-in to future pandas behaviour to suppress downcasting FutureWarnings
+pd.set_option('future.no_silent_downcasting', True)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
