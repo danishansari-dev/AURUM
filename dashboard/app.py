@@ -189,7 +189,7 @@ st.markdown(
         margin-top: 8px;
     }}
 
-    /* ── Score ring ───────────────────────────────────────────── */
+    /* ── Score ring (legacy fallback for demo mode) ────────────── */
     .score-ring {{
         display: flex;
         align-items: center;
@@ -209,6 +209,114 @@ st.markdown(
         font-size: 0.95rem;
         color: {_TEXT};
         font-weight: 600;
+    }}
+
+    /* ── Agent score cards (custom HTML, no truncation) ────────── */
+    .agent-cards-row {{
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }}
+    .agent-card {{
+        flex: 1 1 180px;
+        min-width: 180px;
+        max-width: 260px;
+        background: {_BG_CARD};
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 16px 18px;
+        overflow: visible;
+        word-wrap: break-word;
+    }}
+    .agent-card-name {{
+        color: {_TEXT_DIM};
+        font-size: 0.82rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 6px;
+    }}
+    .agent-card-score {{
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: {_GOLD};
+        margin-bottom: 6px;
+    }}
+    .agent-card-bar {{
+        width: 100%;
+        height: 6px;
+        background: #21262d;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 8px;
+    }}
+    .agent-card-bar-fill {{
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.8s ease;
+    }}
+    .agent-card-meta {{
+        font-size: 0.8rem;
+        color: {_TEXT_DIM};
+        line-height: 1.5;
+    }}
+    .agent-card-meta strong {{
+        color: {_TEXT};
+        font-weight: 600;
+    }}
+
+    /* ── Action alignment badges ───────────────────────────────── */
+    .action-badge {{
+        display: inline-block;
+        font-weight: 700;
+        font-size: 0.75rem;
+        padding: 2px 10px;
+        border-radius: 4px;
+        letter-spacing: 0.3px;
+    }}
+    .action-badge.buy {{ background: rgba(0,255,136,0.15); color: {_GREEN}; }}
+    .action-badge.sell {{ background: rgba(255,68,68,0.15); color: {_RED}; }}
+    .action-badge.neutral {{ background: rgba(139,148,158,0.15); color: {_TEXT_DIM}; }}
+
+    /* ── Backtest warning box ──────────────────────────────────── */
+    .bt-warning-box {{
+        background: rgba(255, 215, 0, 0.06);
+        border: 1px solid rgba(255, 215, 0, 0.25);
+        border-radius: 12px;
+        padding: 20px 24px;
+        color: {_TEXT};
+        margin: 12px 0;
+    }}
+    .bt-warning-box h4 {{
+        color: {_GOLD};
+        margin: 0 0 8px;
+    }}
+    .bt-warning-box p {{
+        color: {_TEXT_DIM};
+        margin: 0;
+        font-size: 0.92rem;
+        line-height: 1.6;
+    }}
+
+    /* ── Streak info bar ──────────────────────────────────────── */
+    .streak-bar {{
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        background: {_BG_CARD};
+        border: 1px solid #30363d;
+        border-radius: 10px;
+        padding: 14px 20px;
+        margin: 10px 0 16px;
+    }}
+    .streak-item {{
+        color: {_TEXT_DIM};
+        font-size: 0.88rem;
+    }}
+    .streak-item strong {{
+        color: {_TEXT};
+        font-weight: 700;
     }}
 
     /* ── Conflict box ────────────────────────────────────────── */
@@ -621,11 +729,11 @@ def _build_equity_chart(equity_curve):
     Build a themed equity-curve line chart from the backtest engine output.
 
     Accepts either a dict ``{date_string: value}`` or a list ``[value, ...]``.
-    The engine returns a list of cumulative PnL in pips; we convert to a
-    dollar-based equity starting at $10,000.
+    The engine returns a list of cumulative PnL in pips; we plot it directly
+    as pip-based PnL with a gold-coloured line and a zero reference line.
 
     Args:
-        equity_curve: Cumulative PnL list or date-keyed dict.
+        equity_curve: Cumulative PnL list (pips) or date-keyed dict.
 
     Returns:
         Plotly Figure.
@@ -656,27 +764,38 @@ def _build_equity_chart(equity_curve):
     # Normalise: engine returns list[float] (cumulative pip PnL), dashboard
     # may also receive dict[str, float] from demo mode.
     if isinstance(equity_curve, dict):
-        dates = list(equity_curve.keys())
+        x_axis = list(equity_curve.keys())
         values = list(equity_curve.values())
+        x_label = "Date"
     else:
-        # List of cumulative pip PnL → convert to dollar equity from $10k base
-        base = 10_000.0
-        values = [base + v for v in equity_curve]
-        dates = list(range(1, len(values) + 1))  # trade sequence number
+        # List of cumulative pip PnL — plot as pips directly
+        values = list(equity_curve)
+        x_axis = list(range(1, len(values) + 1))
+        x_label = "Trade #"
 
-    # Determine gain/loss colour
-    line_colour = _GREEN if values[-1] >= values[0] else _RED
+    # Determine gain/loss colour from final value
+    line_colour = _GREEN if values[-1] >= 0 else _RED
 
     fig = go.Figure()
+
+    # Horizontal zero reference line
+    fig.add_hline(
+        y=0, line_width=1, line_dash="dash",
+        line_color="#484f58",
+        annotation_text="Break-even",
+        annotation_font_color=_TEXT_DIM,
+        annotation_font_size=10,
+    )
+
     fig.add_trace(
         go.Scatter(
-            x=dates,
+            x=x_axis,
             y=values,
             mode="lines",
-            name="Equity",
-            line=dict(color=line_colour, width=2.5),
+            name="Cumulative P&L",
+            line=dict(color=_GOLD, width=2.5),
             fill="tozeroy",
-            fillcolor=f"rgba({','.join(str(int(line_colour.lstrip('#')[i:i+2], 16)) for i in (0, 2, 4))}, 0.08)",
+            fillcolor="rgba(255, 215, 0, 0.06)",
         )
     )
     fig.update_layout(
@@ -686,8 +805,8 @@ def _build_equity_chart(equity_curve):
         font_color=_TEXT,
         height=350,
         margin=dict(l=0, r=0, t=30, b=0),
-        xaxis=dict(gridcolor="#21262d", title="Trade #" if isinstance(equity_curve, list) else "Date"),
-        yaxis=dict(gridcolor="#21262d", title="Equity (USD)"),
+        xaxis=dict(gridcolor="#21262d", title=x_label),
+        yaxis=dict(gridcolor="#21262d", title="Cumulative P&L (pips)"),
     )
     return fig
 
@@ -695,6 +814,213 @@ def _build_equity_chart(equity_curve):
 # ══════════════════════════════════════════════════════════════════════
 # UI COMPONENT HELPERS
 # ══════════════════════════════════════════════════════════════════════
+
+
+def _render_score_gauge(score: float, rating: str) -> None:
+    """
+    Render an animated SVG arc gauge for the final strategy score.
+
+    Uses stroke-dasharray/dashoffset technique to draw a partial arc.
+    Colour gradient: red (<40), orange (<55), yellow (<70), green (>=70).
+    Animated fill from 0 to final score over 1.2s on load.
+
+    Args:
+        score: Numeric score 0-100.
+        rating: Human-readable rating string from the orchestrator.
+    """
+    # Choose arc colour based on score bands
+    if score >= 70:
+        arc_color = "#00FF88"
+    elif score >= 55:
+        arc_color = "#FFD700"
+    elif score >= 40:
+        arc_color = "#FF8C00"
+    else:
+        arc_color = "#FF4444"
+
+    # SVG arc math: circumference of the gauge arc (270° of a circle, r=80)
+    radius = 80
+    circumference = 2 * 3.14159 * radius  # ~502.65
+    arc_length = circumference * 0.75      # 270° arc = 75% of full circle
+    fill_length = arc_length * (score / 100.0)
+    gap = arc_length - fill_length
+
+    # Strip emoji from rating for the inner label (emoji renders poorly in SVG)
+    rating_short = rating.split("\u2014")[0].strip() if "\u2014" in rating else rating
+    # Remove leading emoji characters
+    for prefix in ["\U0001f3c6", "\u2705", "\U0001f7e1", "\u26a0\ufe0f", "\u274c"]:
+        rating_short = rating_short.replace(prefix, "").strip()
+
+    svg_html = f"""
+    <div style="text-align:center; margin: 8px 0 12px;">
+      <svg width="200" height="200" viewBox="0 0 200 200" style="display:block; margin:0 auto;">
+        <!-- Background arc (dark gray, 270°) -->
+        <circle cx="100" cy="100" r="{radius}"
+                fill="none" stroke="#2a2a2a" stroke-width="12"
+                stroke-dasharray="{arc_length:.1f} {circumference:.1f}"
+                stroke-dashoffset="0"
+                stroke-linecap="round"
+                transform="rotate(135 100 100)" />
+        <!-- Colored arc (animated fill) -->
+        <circle cx="100" cy="100" r="{radius}"
+                fill="none" stroke="{arc_color}" stroke-width="12"
+                stroke-dasharray="{fill_length:.1f} {gap:.1f}"
+                stroke-dashoffset="{fill_length:.1f}"
+                stroke-linecap="round"
+                transform="rotate(135 100 100)"
+                style="filter: drop-shadow(0 0 6px {arc_color}40);">
+          <animate attributeName="stroke-dashoffset"
+                   from="{arc_length:.1f}" to="0"
+                   dur="1.2s" fill="freeze"
+                   calcMode="spline"
+                   keySplines="0.25 0.1 0.25 1" />
+        </circle>
+        <!-- Score number -->
+        <text x="100" y="95" text-anchor="middle" dominant-baseline="central"
+              fill="{arc_color}" font-size="48" font-weight="800"
+              font-family="-apple-system, BlinkMacSystemFont, sans-serif">
+          {score:.0f}
+        </text>
+        <!-- Rating label inside ring -->
+        <text x="100" y="130" text-anchor="middle" dominant-baseline="central"
+              fill="#8B949E" font-size="13" font-weight="600"
+              font-family="-apple-system, BlinkMacSystemFont, sans-serif">
+          {rating_short}
+        </text>
+      </svg>
+      <div style="color: #E6EDF3; font-size: 0.9rem; font-weight: 600; margin-top: 4px;">
+        {rating}
+      </div>
+    </div>
+    """
+    components.html(svg_html, height=260)
+
+
+def _render_agent_cards(results: dict) -> None:
+    """
+    Render agent score cards as custom HTML to prevent st.metric truncation.
+
+    Uses components.html (iframe) instead of st.markdown because Streamlit's
+    markdown sanitiser strips complex/nested HTML, causing raw tags to show.
+
+    Each card shows: full agent name, score/100 in large font, a coloured
+    progress bar, win rate percentage, and feedback count — all with
+    word-wrap so nothing is ever clipped.
+
+    Args:
+        results: ``{agent_name: AgentResult}`` dict from the orchestrator.
+    """
+    if not results:
+        return
+
+    # Build individual card divs
+    card_divs = ""
+    for name, r in results.items():
+        # Bar colour: green >=65, yellow >=45, red <45
+        if r.score >= 65:
+            bar_color = _GREEN
+        elif r.score >= 45:
+            bar_color = _GOLD
+        else:
+            bar_color = _RED
+
+        # Feedback count = number of feedback strings the agent produced
+        fb_count = len(r.feedback) if hasattr(r, 'feedback') else 0
+        plural = "s" if fb_count != 1 else ""
+
+        card_divs += f"""
+        <div class="agent-card">
+            <div class="agent-card-name">{name} Agent</div>
+            <div class="agent-card-score">{r.score:.0f} <span class="score-suffix">/ 100</span></div>
+            <div class="agent-card-bar">
+                <div class="agent-card-bar-fill" style="width:{r.score}%; background:{bar_color};"></div>
+            </div>
+            <div class="agent-card-meta">
+                <strong>Win Rate:</strong> {r.win_rate:.1%}<br/>
+                {fb_count} signal{plural} analyzed
+            </div>
+        </div>
+        """
+
+    # Self-contained HTML with inline styles (rendered in an iframe via components.html)
+    num_cards = len(results)
+    row_height = 160 if num_cards <= 3 else 340  # Stack wrap if >3 agents
+
+    full_html = f"""
+    <html>
+    <head>
+    <style>
+        body {{
+            margin: 0; padding: 0;
+            background: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }}
+        .agent-cards-row {{
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }}
+        .agent-card {{
+            flex: 1 1 160px;
+            min-width: 160px;
+            max-width: 280px;
+            background: {_BG_CARD};
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 16px 18px;
+            box-sizing: border-box;
+        }}
+        .agent-card-name {{
+            color: {_TEXT_DIM};
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 6px;
+        }}
+        .agent-card-score {{
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: {_GOLD};
+            margin-bottom: 6px;
+        }}
+        .score-suffix {{
+            font-size: 0.9rem;
+            color: #8B949E;
+            font-weight: 500;
+        }}
+        .agent-card-bar {{
+            width: 100%;
+            height: 6px;
+            background: #21262d;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }}
+        .agent-card-bar-fill {{
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }}
+        .agent-card-meta {{
+            font-size: 0.8rem;
+            color: {_TEXT_DIM};
+            line-height: 1.5;
+        }}
+        .agent-card-meta strong {{
+            color: {_TEXT};
+            font-weight: 600;
+        }}
+    </style>
+    </head>
+    <body>
+        <div class="agent-cards-row">
+            {card_divs}
+        </div>
+    </body>
+    </html>
+    """
+    components.html(full_html, height=row_height)
 
 
 def _render_conflict(conflict: dict) -> None:
@@ -925,48 +1251,35 @@ def _run_pipeline(
 
 
 def _render_left_results(col, evaluation: dict) -> None:
-    """Render score ring, agent cards, and conflict warnings in the left panel."""
+    """Render SVG score gauge, custom agent cards, and conflict warnings in the left panel."""
     with col:
         st.markdown("---")
 
-        # ── Final score ring ─────────────────────────────────────────
+        # ── Final score gauge (SVG arc) ──────────────────────────────
         final_score = evaluation.get("final_score", 0.0)
         rating = evaluation.get("rating", "")
-        st.markdown(
-            f"""
-            <div class="score-ring">{final_score:.0f}</div>
-            <div class="rating-label">{rating}</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        _render_score_gauge(final_score, rating)
 
-        st.markdown("")
-
-        # ── Agent scorecard (metric cards) ───────────────────────────
+        # ── Agent score cards (custom HTML, no truncation) ───────────
         results = evaluation.get("individual_results", {})
         if results:
             st.markdown("#### Agent Scores")
-            agent_names = list(results.keys())
-
-            # Lay out in rows of 3
-            for row_start in range(0, len(agent_names), 3):
-                row_agents = agent_names[row_start : row_start + 3]
-                metric_cols = st.columns(len(row_agents))
-                for mc, name in zip(metric_cols, row_agents):
-                    r = results[name]
-                    with mc:
-                        st.metric(
-                            label=f"{name} Agent",
-                            value=f"{r.score:.0f}/100",
-                            delta=f"{r.win_rate:.0%} win rate",
-                        )
+            _render_agent_cards(results)
 
         # ── Conflicts ────────────────────────────────────────────────
         conflicts = evaluation.get("conflicts", [])
-        if conflicts:
-            st.markdown("#### ⚠️ Conflicts Detected")
-            for c in conflicts:
-                _render_conflict(c)
+        if conflicts and len(conflicts) > 0:
+            st.markdown("### \u26a1 Conflicts Detected")
+            for conflict in conflicts:
+                severity_icon = {"HIGH": "\U0001f534", "MEDIUM": "\U0001f7e1", "LOW": "\U0001f535"}
+                icon = severity_icon.get(conflict.get("severity", "LOW"), "\U0001f535")
+                st.warning(
+                    f"{icon} **{conflict.get('conflict_type', 'Unknown')}** \u2014 "
+                    f"{conflict.get('description', '')}"
+                )
+                st.caption(f"Agents involved: {', '.join(conflict.get('agents_involved', []))}")
+        else:
+            st.success("\u2705 No indicator conflicts detected \u2014 all agents agree on direction.")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -978,7 +1291,7 @@ def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
     """Render tabs: Price Chart, Backtest Results, Agent Reports."""
     with col:
         tab_chart, tab_backtest, tab_reports = st.tabs(
-            ["📈 Price Chart", "🧪 Backtest Results", "🤖 Agent Reports"]
+            ["\U0001f4c8 Price Chart", "\U0001f9ea Backtest Results", "\U0001f916 Agent Reports"]
         )
 
         # ── Tab 1: Candlestick chart ─────────────────────────────────
@@ -988,34 +1301,83 @@ def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
 
         # ── Tab 2: Backtest Results ──────────────────────────────────
         with tab_backtest:
-            # Map engine output keys to dashboard display names.
-            # Engine uses: accuracy (%), net_pnl_pct, net_pnl_pips, equity_curve (list)
-            m1, m2, m3, m4 = st.columns(4)
-            with m1:
-                ret = backtest.get("net_pnl_pct", 0.0)
-                st.metric("Total Return", f"{ret:+.2f}%", delta=None)
-            with m2:
-                st.metric("Win Rate", f"{backtest.get('accuracy', 0):.1f}%")
-            with m3:
-                st.metric("Sharpe Ratio", f"{backtest.get('sharpe_ratio', 0):.2f}")
-            with m4:
-                st.metric("Max Drawdown", f"-{backtest.get('max_drawdown_pct', 0):.2f}%")
+            total_trades = backtest.get("total_trades", 0)
 
-            # Second row
-            m5, m6, m7, _ = st.columns(4)
-            with m5:
-                st.metric("Total Trades", backtest.get("total_trades", 0))
-            with m6:
-                pf = backtest.get("profit_factor", 0)
-                pf_str = f"{pf:.2f}" if pf != float("inf") else "\u221e"
-                st.metric("Profit Factor", pf_str)
-            with m7:
-                # Compute final equity from pip-based equity curve
-                eq = backtest.get("equity_curve", [])
-                final_val = 10_000.0 + eq[-1] if eq else 10_000.0
-                st.metric("Final Value", f"${final_val:,.2f}")
+            if total_trades == 0:
+                # ── Zero trades: styled warning + empty metric cards ──
+                period_info = backtest.get("backtest_period", {})
+                candles = period_info.get("total_candles", "N/A")
+                st.markdown(
+                    f"""
+                    <div class="bt-warning-box">
+                        <h4>\u26a0\ufe0f No Trades Generated</h4>
+                        <p>
+                            Your conditions are too strict for the selected backtest period
+                            ({candles} candles). Try relaxing one condition
+                            (e.g., raise RSI threshold from 30 to 35) or extend the
+                            backtest period to capture more signal opportunities.
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                # Still show metric cards with 0 values so tab is never blank
+                m1, m2, m3, m4 = st.columns(4)
+                with m1:
+                    st.metric("Total Trades", 0)
+                with m2:
+                    st.metric("Accuracy", "0.0%")
+                with m3:
+                    st.metric("Net P&L", "0.00 pips")
+                with m4:
+                    st.metric("Max Drawdown", "0.00%")
 
-            st.markdown("")
+            else:
+                # ── Row 1: Primary metrics (4 cards) ─────────────────
+                m1, m2, m3, m4 = st.columns(4)
+                with m1:
+                    st.metric("Total Trades", total_trades)
+                with m2:
+                    st.metric("Accuracy", f"{backtest.get('accuracy', 0):.1f}%")
+                with m3:
+                    net_pips = backtest.get("net_pnl_pips", 0.0)
+                    color_prefix = "+" if net_pips >= 0 else ""
+                    st.metric("Net P&L", f"{color_prefix}{net_pips:.2f} pips")
+                with m4:
+                    st.metric("Max Drawdown", f"-{backtest.get('max_drawdown_pct', 0):.2f}%")
+
+                # ── Row 2: Secondary metrics (3 cards) ───────────────
+                m5, m6, m7, _ = st.columns(4)
+                with m5:
+                    st.metric("Sharpe Ratio", f"{backtest.get('sharpe_ratio', 0):.2f}")
+                with m6:
+                    pf = backtest.get("profit_factor", 0)
+                    pf_str = f"{pf:.2f}" if pf != float("inf") else "\u221e"
+                    st.metric("Profit Factor", pf_str)
+                with m7:
+                    avg_win = backtest.get("avg_win_pips", 0.0)
+                    avg_loss = abs(backtest.get("avg_loss_pips", 0.0)) or 1.0
+                    wl_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 0.0
+                    st.metric("Avg Win/Loss", f"{wl_ratio:.2f}")
+
+                # ── Row 3: Win/Loss streaks ──────────────────────────
+                max_win_streak = backtest.get("max_win_streak", 0)
+                max_loss_streak = backtest.get("max_loss_streak", 0)
+                current_streak = backtest.get("current_streak", {})
+                cs_type = current_streak.get("type", "WIN")
+                cs_count = current_streak.get("count", 0)
+                st.markdown(
+                    f"""
+                    <div class="streak-bar">
+                        <div class="streak-item">\U0001f525 Max Win Streak: <strong>{max_win_streak}</strong></div>
+                        <div class="streak-item">\U0001f4c9 Max Loss Streak: <strong>{max_loss_streak}</strong></div>
+                        <div class="streak-item">\U0001f3af Current: <strong>{cs_count} {cs_type}{"s" if cs_count != 1 else ""}</strong></div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # ── Equity Curve (always shown — handles zero-trade case gracefully) ──
             st.markdown("##### Equity Curve")
             equity_fig = _build_equity_chart(backtest.get("equity_curve", []))
             st.plotly_chart(equity_fig, key="equity_chart")
@@ -1024,36 +1386,53 @@ def _render_right_results(col, df, evaluation: dict, backtest: dict) -> None:
         with tab_reports:
             results = evaluation.get("individual_results", {})
             if not results:
-                st.info("No agent results to display.")
+                st.info(
+                    "Agent details unavailable \u2014 re-run evaluation to populate."
+                )
             else:
                 for name, result in results.items():
                     with st.expander(
-                        f"{'🟢' if result.score >= 55 else '🔴'} {name} Agent — "
-                        f"Score: {result.score:.0f}/100  |  "
-                        f"Alignment: {result.action_alignment}",
+                        f"{name} Agent \u2014 Score: {result.score:.0f}/100",
                         expanded=False,
                     ):
-                        # Feedback
-                        st.markdown("**Feedback**")
-                        for fb in result.feedback:
-                            st.markdown(f"- {fb}")
+                        # Score progress bar
+                        st.progress(min(result.score / 100.0, 1.0))
 
-                        # Suggestions
+                        # Feedback section
+                        st.markdown("**\U0001f4cb Feedback:**")
+                        if result.feedback:
+                            for fb in result.feedback:
+                                st.markdown(f"- {fb}")
+                        else:
+                            st.caption("No feedback generated.")
+
+                        # Suggestions section
+                        st.markdown("**\U0001f4a1 Suggestions:**")
                         if result.suggestions:
-                            st.markdown("**Suggestions**")
                             for sg in result.suggestions:
-                                st.markdown(f"- 💡 {sg}")
+                                st.markdown(f"- {sg}")
+                        else:
+                            st.caption("No suggestions generated.")
+
+                        # Action alignment as colored badge
+                        action = result.action_alignment
+                        badge_class = action.lower() if action in ("BUY", "SELL", "NEUTRAL") else "neutral"
+                        st.markdown(
+                            f'**\U0001f4ca Action Alignment:** '
+                            f'<span class="action-badge {badge_class}">{action}</span>',
+                            unsafe_allow_html=True,
+                        )
 
                         st.caption(
-                            f"Win Rate: {result.win_rate:.2%}  •  "
-                            f"Action: {result.action_alignment}"
+                            f"Win Rate: {result.win_rate:.2%}  \u2022  "
+                            f"Signals analyzed: {len(result.feedback)}"
                         )
 
             # ── Aggregated Suggestions ───────────────────────────
             suggestions = evaluation.get("suggestions", [])
             if suggestions:
                 st.markdown("---")
-                st.markdown("#### 💡 Strategy Suggestions")
+                st.markdown("#### \U0001f4a1 Strategy Suggestions")
                 for s in suggestions:
                     st.markdown(f"- {s}")
 
