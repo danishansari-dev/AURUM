@@ -1207,7 +1207,7 @@ def _run_pipeline(
     with st.spinner("🧠 Parsing strategy…"):
         StrategyParser = _get_parser()
         parser = StrategyParser()
-        conditions = parser.parse_regex(strategy_text)
+        conditions = parser.parse(strategy_text)
 
     if not conditions:
         st.error(
