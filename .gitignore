@@ -8,7 +8,7 @@ build/
 *.egg
 
 # ── Virtual environment ─────────────────────────
-aurum_env/
+# aurum_env/
 venv/
 .venv/
 env/
