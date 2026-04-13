@@ -278,6 +278,63 @@ class BacktestEngine:
     # Vectorised signal generation
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _apply_signal_window(mask: pd.Series, window: int = 5) -> pd.Series:
+        """
+        Extend a point-in-time boolean signal to persist for *window* candles.
+
+        Crossover events fire True on a single candle.  When AND-ed with
+        threshold conditions (e.g. RSI < 35) in daily data, both rarely
+        coincide on the same bar — producing zero trades.  This method
+        keeps crossover signals True for the next *window* candles so
+        threshold conditions have a realistic chance to overlap.
+
+        Uses a rolling-max to avoid a Python loop over the entire Series.
+
+        Args:
+            mask: Boolean Series where True marks the original event.
+            window: Number of candles to persist the signal (default 5).
+
+        Returns:
+            Boolean Series with windowed persistence applied.
+        """
+        # rolling(window).max() propagates any True in the last *window* bars
+        numeric = mask.astype(int)
+        windowed = numeric.rolling(window=window, min_periods=1).max()
+        return windowed.fillna(0).astype(bool)
+
+    @staticmethod
+    def _infer_window_size(df: pd.DataFrame) -> int:
+        """
+        Detect data frequency from index spacing and return an appropriate
+        crossover window size.
+
+        Daily data → 15 bars (~3 trading weeks) because EMA crossovers on
+        daily charts are macro events that rarely align with threshold
+        conditions on the same bar.
+
+        Intraday (≤ 4h) → 5 bars (tight window for faster signals).
+
+        Args:
+            df: DataFrame with DatetimeIndex.
+
+        Returns:
+            Integer window size (bars).
+        """
+        if len(df) < 3:
+            return 5
+
+        # Median time delta between bars (robust to gaps like weekends)
+        deltas = pd.Series(df.index).diff().dropna()
+        median_hours = deltas.median().total_seconds() / 3600.0
+
+        if median_hours >= 20:  # ~daily (24h minus weekend compression)
+            return 30
+        elif median_hours >= 3:  # 4h bars
+            return 10
+        else:  # 1h or smaller
+            return 5
+
     def _build_entry_signal(
         self,
         df: pd.DataFrame,
@@ -288,6 +345,8 @@ class BacktestEngine:
 
         Each condition generates its own boolean Series; the final signal is
         True only where ALL conditions are simultaneously satisfied.
+        Crossover conditions are automatically windowed (adaptive to timeframe)
+        so they can realistically overlap with threshold conditions.
 
         Args:
             df: Working DataFrame with indicator columns.
@@ -297,9 +356,17 @@ class BacktestEngine:
             Boolean Series aligned with df.index.
         """
         composite = pd.Series(True, index=df.index)
+        window_size = self._infer_window_size(df)
 
         for cond in conditions:
             mask = self._condition_to_mask(cond, df)
+            # BUG-002 fix: crossover signals are point-in-time events that
+            # almost never coincide with threshold conditions on the same
+            # candle.  Persist them using an adaptive window so AND-logic
+            # can fire across different timeframes.
+            op = str(cond.get("operator", ""))
+            if "crossover" in op:
+                mask = self._apply_signal_window(mask, window=window_size)
             composite = composite & mask
 
         return composite

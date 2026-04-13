@@ -82,8 +82,10 @@ class StrategyParser:
         r"RSI\s*(?:is\s+)?(?:above|over|>|greater\s+than)\s+([\d.]+)",
         re.IGNORECASE,
     )
+    # BUG-005 fix: now handles "RSI crosses above 50" and "RSI crosses below 50"
+    # by making the direction word (above/below) an optional captured group.
     _RSI_CROSSES = re.compile(
-        r"RSI\s*(?:crosses?|cross)\s+([\d.]+)",
+        r"RSI\s*(?:crosses?|cross)\s+(?:(above|below)\s+)?([\d.]+)",
         re.IGNORECASE,
     )
 
@@ -136,19 +138,27 @@ class StrategyParser:
     )
 
     # --- Bollinger Bands patterns ---
+    # BUG-006 fix: "upper" and "lower" are now REQUIRED to avoid ambiguous
+    # matches where "price touches bollinger band" would fire both patterns.
     _BB_LOWER = re.compile(
         r"(?:price|close)\s+(?:(?:touches?|hits?|near|at|below|breaks?)\s+)?(?:the\s+)?"
-        r"(?:lower\s+)?bollinger\s*(?:band)?(?:\s+lower)?",
+        r"lower\s+bollinger\s*(?:band)?",
         re.IGNORECASE,
     )
     _BB_UPPER = re.compile(
         r"(?:price|close)\s+(?:(?:touches?|hits?|near|at|above|breaks?)\s+)?(?:the\s+)?"
-        r"(?:upper\s+)?bollinger\s*(?:band)?(?:\s+upper)?",
+        r"upper\s+bollinger\s*(?:band)?",
         re.IGNORECASE,
     )
     # Simpler fallback: just "bollinger lower" or "bollinger upper"
     _BB_LOWER_SIMPLE = re.compile(r"bollinger\s+lower", re.IGNORECASE)
     _BB_UPPER_SIMPLE = re.compile(r"bollinger\s+upper", re.IGNORECASE)
+    # Catch ambiguous unqualified "bollinger band" (no upper/lower)
+    _BB_AMBIGUOUS = re.compile(
+        r"(?:price|close)\s+(?:(?:touches?|hits?|near|at|breaks?)\s+)?(?:the\s+)?"
+        r"bollinger\s*(?:band)?(?!\s*(?:upper|lower))",
+        re.IGNORECASE,
+    )
 
     # Claude model used for AI-fallback parsing
     _CLAUDE_MODEL = "claude-sonnet-4-20250514"
@@ -179,7 +189,10 @@ class StrategyParser:
         """
         conditions = self.parse_regex(user_input)
 
-        if len(conditions) < 2:
+        # BUG-011 fix: threshold was < 2, which triggered Claude on valid
+        # single-condition strategies like "Buy when RSI below 30".  Changed
+        # to < 1 so fallback only fires when regex finds nothing at all.
+        if len(conditions) < 1:
             logger.info(
                 "Regex produced %d condition(s) — falling back to AI parser.",
                 len(conditions),
@@ -232,11 +245,21 @@ class StrategyParser:
                 "action": default_action,
             })
             
+        # BUG-005 fix: handle "RSI crosses above 50" and "RSI crosses below 50"
+        # by reading the optional direction word captured in group(1).
         for m in self._RSI_CROSSES.finditer(text):
-            val = float(m.group(1))
+            direction_word = (m.group(1) or "").lower()
+            val = float(m.group(2))
+            if direction_word == "above":
+                op = ">"
+            elif direction_word == "below":
+                op = "<"
+            else:
+                # No direction word: infer from value (>= 50 → crossing up)
+                op = ">" if val >= 50 else "<"
             raw_conditions.append({
                 "indicator": "RSI",
-                "operator": ">" if val >= 50 else "<",
+                "operator": op,
                 "value": val,
                 "action": default_action,
             })
@@ -247,24 +270,27 @@ class StrategyParser:
             # Ensure fast < slow regardless of user ordering
             if fast > slow:
                 fast, slow = slow, fast
+            # BUG-004 fix: use default_action instead of hardcoded "BUY"
+            # so the user's explicit direction keyword is respected.
             raw_conditions.append({
                 "indicator": "EMA",
                 "operator": "crossover_above",
                 "fast": fast,
                 "slow": slow,
-                "action": "BUY",
+                "action": default_action,
             })
 
         for m in self._EMA_CROSS_BELOW.finditer(text):
             fast, slow = int(m.group(1)), int(m.group(2))
             if fast > slow:
                 fast, slow = slow, fast
+            # BUG-004 fix: use default_action instead of hardcoded "SELL"
             raw_conditions.append({
                 "indicator": "EMA",
                 "operator": "crossover_below",
                 "fast": fast,
                 "slow": slow,
-                "action": "SELL",
+                "action": default_action,
             })
 
         # --- Single EMA vs price ---
@@ -305,43 +331,53 @@ class StrategyParser:
             fast, slow = int(m.group(1)), int(m.group(2))
             if fast > slow:
                 fast, slow = slow, fast
+            # BUG-004 fix: use default_action instead of hardcoded "BUY"
             raw_conditions.append({
                 "indicator": "SMA",
                 "operator": "crossover_above",
                 "fast": fast,
                 "slow": slow,
-                "action": "BUY",
+                "action": default_action,
             })
 
         for m in self._SMA_CROSS_BELOW.finditer(text):
             fast, slow = int(m.group(1)), int(m.group(2))
             if fast > slow:
                 fast, slow = slow, fast
+            # BUG-004 fix: use default_action instead of hardcoded "SELL"
             raw_conditions.append({
                 "indicator": "SMA",
                 "operator": "crossover_below",
                 "fast": fast,
                 "slow": slow,
-                "action": "SELL",
+                "action": default_action,
             })
 
         # --- MACD ---
         if self._MACD_BULLISH.search(text):
+            # BUG-004 fix: use default_action instead of hardcoded "BUY"
             raw_conditions.append({
                 "indicator": "MACD",
                 "operator": "crossover_above",
-                "action": "BUY",
+                "action": default_action,
             })
 
         if self._MACD_BEARISH.search(text):
+            # BUG-004 fix: use default_action instead of hardcoded "SELL"
             raw_conditions.append({
                 "indicator": "MACD",
                 "operator": "crossover_below",
-                "action": "SELL",
+                "action": default_action,
             })
 
         # --- Bollinger Bands ---
-        if self._BB_LOWER.search(text) or self._BB_LOWER_SIMPLE.search(text):
+        # BUG-006 fix: patterns now require upper/lower keyword.
+        # Ambiguous input ("price touches bollinger band") defaults to lower
+        # for BUY and upper for SELL instead of matching both.
+        bb_lower_match = self._BB_LOWER.search(text) or self._BB_LOWER_SIMPLE.search(text)
+        bb_upper_match = self._BB_UPPER.search(text) or self._BB_UPPER_SIMPLE.search(text)
+
+        if bb_lower_match:
             raw_conditions.append({
                 "indicator": "BB",
                 "operator": "<",
@@ -349,13 +385,33 @@ class StrategyParser:
                 "action": default_action if default_action != "SELL" else "BUY",
             })
 
-        if self._BB_UPPER.search(text) or self._BB_UPPER_SIMPLE.search(text):
+        if bb_upper_match:
             raw_conditions.append({
                 "indicator": "BB",
                 "operator": ">",
                 "value": 0.0,
                 "action": default_action if default_action != "BUY" else "SELL",
             })
+
+        # Fallback for ambiguous "bollinger band" without upper/lower qualifier
+        if not bb_lower_match and not bb_upper_match and self._BB_AMBIGUOUS.search(text):
+            # Default: lower band for BUY, upper band for SELL
+            if default_action == "BUY":
+                raw_conditions.append({
+                    "indicator": "BB",
+                    "operator": "<",
+                    "value": 0.0,
+                    "action": "BUY",
+                })
+                logger.info("Ambiguous 'bollinger band' — defaulting to lower band for BUY.")
+            else:
+                raw_conditions.append({
+                    "indicator": "BB",
+                    "operator": ">",
+                    "value": 0.0,
+                    "action": "SELL",
+                })
+                logger.info("Ambiguous 'bollinger band' — defaulting to upper band for SELL.")
 
         return self._validate_conditions(raw_conditions)
 

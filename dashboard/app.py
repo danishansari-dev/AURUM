@@ -1188,7 +1188,7 @@ def _run_pipeline(
                 st.write(traceback.format_exc())
                 return
 
-    # ── Step 1 & 2: Fetch + Indicators (cached) ─────────────────────
+    # ── Step 1: Fetch price data (cached) ────────────────────────────
     with st.spinner("📡 Fetching Gold price data…"):
         try:
             df_raw = _fetch_history(period_str)
@@ -1196,14 +1196,9 @@ def _run_pipeline(
             st.error(f"Failed to fetch data: {exc}")
             return
 
-    with st.spinner("📊 Computing indicators…"):
-        try:
-            df = _compute_indicators(df_raw)
-        except Exception as exc:
-            st.error(f"Indicator computation failed: {exc}")
-            return
-
-    # ── Step 3: Parse strategy (lazy import) ─────────────────────────
+    # ── Step 2: Parse strategy FIRST (lazy import) ───────────────────
+    # BUG-001/009 fix: parse before indicators so the conditions list
+    # can be passed to add_all_indicators for dynamic EMA/SMA periods.
     with st.spinner("🧠 Parsing strategy…"):
         StrategyParser = _get_parser()
         parser = StrategyParser()
@@ -1215,6 +1210,15 @@ def _run_pipeline(
             "Try: *Buy when RSI below 30 and EMA20 crosses above EMA50*"
         )
         return
+
+    # ── Step 3: Compute indicators with parsed conditions ────────────
+    with st.spinner("📊 Computing indicators…"):
+        try:
+            add_all = _get_indicator_calculator()
+            df = add_all(df_raw, conditions=conditions)
+        except Exception as exc:
+            st.error(f"Indicator computation failed: {exc}")
+            return
 
     # ── Step 4: Orchestrator evaluation (lazy import + ThreadPoolExecutor) ──
     with st.spinner("🤖 Agents evaluating strategy…"):

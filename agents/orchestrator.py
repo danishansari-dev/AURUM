@@ -126,14 +126,14 @@ class OrchestratorAgent:
         weighted_score = self._compute_weighted_score(individual_results)
 
         # --- Step 4: Apply conflict penalty ---
-        # Critical conflicts erode confidence in the aggregate score
+        # BUG-008 fix: old multiplicative penalties could destroy good scores
+        # (e.g. 2 HIGH + 1 MEDIUM = 37% reduction).  New additive approach
+        # caps total penalty at 20 points — conflicts are informational, not
+        # punitive, since agent disagreement isn't necessarily bad.
         high_conflicts = sum(1 for c in conflicts if c["severity"] == "HIGH")
         medium_conflicts = sum(1 for c in conflicts if c["severity"] == "MEDIUM")
-        if high_conflicts:
-            weighted_score *= max(0.5, 1.0 - 0.15 * high_conflicts)
-        if medium_conflicts:
-            weighted_score *= max(0.7, 1.0 - 0.05 * medium_conflicts)
-        weighted_score = max(0.0, min(100.0, weighted_score))
+        penalty = min(20.0, 10.0 * high_conflicts + 3.0 * medium_conflicts)
+        weighted_score = max(0.0, min(100.0, weighted_score - penalty))
 
         # --- Step 5: Assemble response ---
         rating = self.score_to_rating(weighted_score)
