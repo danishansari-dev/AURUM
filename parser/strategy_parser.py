@@ -82,6 +82,10 @@ class StrategyParser:
         r"RSI\s*(?:is\s+)?(?:above|over|>|greater\s+than)\s+([\d.]+)",
         re.IGNORECASE,
     )
+    _RSI_CROSSES = re.compile(
+        r"RSI\s*(?:crosses?|cross)\s+([\d.]+)",
+        re.IGNORECASE,
+    )
 
     # --- EMA crossover patterns ---
     _EMA_CROSS_ABOVE = re.compile(
@@ -225,6 +229,15 @@ class StrategyParser:
                 "indicator": "RSI",
                 "operator": ">",
                 "value": float(m.group(1)),
+                "action": default_action,
+            })
+            
+        for m in self._RSI_CROSSES.finditer(text):
+            val = float(m.group(1))
+            raw_conditions.append({
+                "indicator": "RSI",
+                "operator": ">" if val >= 50 else "<",
+                "value": val,
                 "action": default_action,
             })
 
