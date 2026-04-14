@@ -329,7 +329,7 @@ class BacktestEngine:
         median_hours = deltas.median().total_seconds() / 3600.0
 
         if median_hours >= 20:  # ~daily (24h minus weekend compression)
-            return 30
+            return 60
         elif median_hours >= 3:  # 4h bars
             return 10
         else:  # 1h or smaller
